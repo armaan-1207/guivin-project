@@ -1,0 +1,88 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.Python
+
+# ── Virtual environments ───────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Database (SQLite — generated at runtime) ──────────────────────────────────
+backend/guivin.db
+backend/*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# ── Evidence frames and clips (large binary, generated at runtime) ─────────────
+backend/evidence/frames/*
+!backend/evidence/frames/.gitkeep
+backend/evidence/clips/*
+!backend/evidence/clips/.gitkeep
+backend/reports/*
+!backend/reports/.gitkeep
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── YOLOv8 / AI model weights (downloaded automatically) ──────────────────────
+*.pt
+*.onnx
+*.torchscript
+runs/
+
+# ── EasyOCR model cache ────────────────────────────────────────────────────────
+.EasyOCR/
+~/.EasyOCR/
+
+# ── Environment / secrets ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.env
+secrets.json
+credentials.json
+
+# ── macOS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ── IDE / editors ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Test / coverage ───────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ── Temp ──────────────────────────────────────────────────────────────────────
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig

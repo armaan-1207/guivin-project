@@ -1,0 +1,68 @@
+[
+  {
+    "camera_id": "HD-AHMD-ASHRAM-001",
+    "avg_vehicles_per_hour": 420,
+    "avg_persons_per_hour": 85,
+    "dominant_direction": "bidirectional",
+    "avg_dwell_seconds": 3.2,
+    "peak_hours": [8, 9, 17, 18, 19],
+    "night_occupancy_rate": 0.12,
+    "version": "v1.0",
+    "validated": true
+  },
+  {
+    "camera_id": "HD-AHMD-NEHRU-002",
+    "avg_vehicles_per_hour": 380,
+    "avg_persons_per_hour": 60,
+    "dominant_direction": "bidirectional",
+    "avg_dwell_seconds": 4.1,
+    "peak_hours": [8, 9, 17, 18],
+    "night_occupancy_rate": 0.09,
+    "version": "v1.0",
+    "validated": true
+  },
+  {
+    "camera_id": "HD-AHMD-STADIUM-003",
+    "avg_vehicles_per_hour": 45,
+    "avg_persons_per_hour": 120,
+    "dominant_direction": "inbound_event_day",
+    "avg_dwell_seconds": 12.0,
+    "peak_hours": [10, 11, 15, 16, 17],
+    "night_occupancy_rate": 0.02,
+    "version": "v1.0",
+    "validated": true
+  },
+  {
+    "camera_id": "RTO-AHMD-NAROL-004",
+    "avg_vehicles_per_hour": 650,
+    "avg_persons_per_hour": 10,
+    "dominant_direction": "bidirectional_highway",
+    "avg_dwell_seconds": 1.8,
+    "peak_hours": [7, 8, 9, 17, 18, 19],
+    "night_occupancy_rate": 0.35,
+    "version": "v1.0",
+    "validated": true
+  },
+  {
+    "camera_id": "RTO-AHMD-SARDAR-005",
+    "avg_vehicles_per_hour": 290,
+    "avg_persons_per_hour": 30,
+    "dominant_direction": "bidirectional",
+    "avg_dwell_seconds": 2.5,
+    "peak_hours": [8, 9, 17, 18],
+    "night_occupancy_rate": 0.08,
+    "version": "v1.0",
+    "validated": true
+  },
+  {
+    "camera_id": "FCS-AHMD-VATVA-008",
+    "avg_vehicles_per_hour": 12,
+    "avg_persons_per_hour": 8,
+    "dominant_direction": "access_road",
+    "avg_dwell_seconds": 25.0,
+    "peak_hours": [9, 10, 11, 14, 15],
+    "night_occupancy_rate": 0.01,
+    "version": "v1.0",
+    "validated": true
+  }
+]

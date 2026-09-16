@@ -1,0 +1,38 @@
+name: GUIVIN CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Import smoke test
+        run: |
+          cd backend
+          python -c "from app.main import app; print('IMPORT OK')"
+
+      - name: Start server and health check
+        run: |
+          cd backend
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+          curl -sf http://localhost:8000/api/health | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['status']=='operational', f'unexpected: {d}'; print('Health OK')"
+          curl -sf http://localhost:8000/api/cameras | python3 -c "import json,sys; d=json.load(sys.stdin); assert len(d)>=12, f'expected >=12 cameras, got {len(d)}'; print(f'Cameras OK: {len(d)}')"
+          curl -sf http://localhost:8000/api/watchlist | python3 -c "import json,sys; d=json.load(sys.stdin); assert len(d)>=8, 'watchlist empty'; print(f'Watchlist OK: {len(d)}')"
+          curl -sf http://localhost:8000/api/watchlist/check/GJ01AB1234 | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['matched'], 'plate not matched'; print('Watchlist check OK')"

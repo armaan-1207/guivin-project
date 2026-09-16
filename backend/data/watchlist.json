@@ -1,0 +1,74 @@
+[
+  {
+    "identifier": "GJ-01-AB-1234",
+    "entry_type": "VEHICLE",
+    "reason": "STOLEN",
+    "source_db": "VAHAN",
+    "owner_name": "Ramesh Patel",
+    "additional_info": "Reported stolen on 2026-09-01. Black Maruti Suzuki Swift.",
+    "priority": "HIGH"
+  },
+  {
+    "identifier": "GJ-01-CD-5678",
+    "entry_type": "VEHICLE",
+    "reason": "WANTED",
+    "source_db": "eGujCop/CCTNS",
+    "owner_name": "Unknown",
+    "additional_info": "Vehicle linked to armed robbery case FIR#2026/4521. Do not approach without backup.",
+    "priority": "HIGH"
+  },
+  {
+    "identifier": "GJ-05-EF-9012",
+    "entry_type": "VEHICLE",
+    "reason": "BLACKLISTED",
+    "source_db": "VAHAN",
+    "owner_name": "Suresh Kumar",
+    "additional_info": "Vehicle blacklisted for repeated traffic violations and unpaid challans.",
+    "priority": "MEDIUM"
+  },
+  {
+    "identifier": "GJ-18-GH-3456",
+    "entry_type": "VEHICLE",
+    "reason": "STOLEN",
+    "source_db": "VAHAN",
+    "owner_name": "Meena Shah",
+    "additional_info": "Two-wheeler reported stolen 2026-08-15. Honda Activa.",
+    "priority": "HIGH"
+  },
+  {
+    "identifier": "MH-12-IJ-7890",
+    "entry_type": "VEHICLE",
+    "reason": "WANTED",
+    "source_db": "eGujCop/CCTNS",
+    "owner_name": "Unknown",
+    "additional_info": "Out-of-state vehicle flagged for drug trafficking suspicion. Coordinate with NCB.",
+    "priority": "HIGH"
+  },
+  {
+    "identifier": "GJ-27-KL-2345",
+    "entry_type": "VEHICLE",
+    "reason": "MISSING_LINK",
+    "source_db": "Missing Persons Registry",
+    "owner_name": "Ankit Verma",
+    "additional_info": "Owner reported missing since 2026-09-10. Last seen near Narol toll.",
+    "priority": "MEDIUM"
+  },
+  {
+    "identifier": "GJ-01-MN-6789",
+    "entry_type": "VEHICLE",
+    "reason": "BLACKLISTED",
+    "source_db": "VAHAN",
+    "owner_name": "Truck Operator",
+    "additional_info": "Commercial vehicle with expired fitness certificate and overloading record.",
+    "priority": "LOW"
+  },
+  {
+    "identifier": "RJ-14-OP-1111",
+    "entry_type": "VEHICLE",
+    "reason": "STOLEN",
+    "source_db": "VAHAN",
+    "owner_name": "Unknown",
+    "additional_info": "Rajasthan-registered vehicle reported stolen. May have entered Gujarat.",
+    "priority": "HIGH"
+  }
+]

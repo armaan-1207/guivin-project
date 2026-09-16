@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GUIVIN — Gujarat Unified Intelligent Video Intelligence Network</title>
+
+  <!-- External deps -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body>
+
+<!-- ── TOP NAV ─────────────────────────────────────────────────────────────── -->
+<nav class="topnav">
+  <div class="nav-brand">
+    <div class="brand-icon"><i class="fas fa-shield-halved"></i></div>
+    <div>
+      <div class="brand-title">GUIVIN</div>
+      <div class="brand-sub">Gujarat Unified Intelligent Video Intelligence Network</div>
+    </div>
+  </div>
+  <div class="nav-stats">
+    <div class="stat-pill" id="stat-cameras"><i class="fas fa-video"></i> <span id="cam-count">—</span> Cameras</div>
+    <div class="stat-pill alert-high" id="stat-alerts-high"><i class="fas fa-triangle-exclamation"></i> <span id="alert-high-count">0</span> HIGH</div>
+    <div class="stat-pill alert-med"><i class="fas fa-circle-exclamation"></i> <span id="alert-med-count">0</span> MED</div>
+    <div class="stat-pill" id="ws-status"><i class="fas fa-circle" style="color:#666"></i> Connecting</div>
+    <div class="stat-pill"><i class="fas fa-clock"></i> <span id="clock">—</span></div>
+  </div>
+</nav>
+
+<!-- ── TABS ────────────────────────────────────────────────────────────────── -->
+<div class="tab-bar">
+  <button class="tab active" onclick="switchTab('registry')"><i class="fas fa-map-location-dot"></i> GIS Registry</button>
+  <button class="tab" onclick="switchTab('monitor')"><i class="fas fa-display"></i> Live Monitor</button>
+  <button class="tab" onclick="switchTab('alerts')"><i class="fas fa-bell"></i> Alerts <span class="badge" id="alert-badge">0</span></button>
+  <button class="tab" onclick="switchTab('journey')"><i class="fas fa-route"></i> Vehicle Journey</button>
+  <button class="tab" onclick="switchTab('blockchain')"><i class="fas fa-link"></i> Blockchain</button>
+  <button class="tab" onclick="switchTab('reports')"><i class="fas fa-file-lines"></i> Reports</button>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════════
+     TAB 1: GIS REGISTRY
+     ════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content active" id="tab-registry">
+  <div class="two-col">
+    <div class="panel" style="flex:2">
+      <div class="panel-header">
+        <span><i class="fas fa-map"></i> Camera Asset Registry — GIS View</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="dept-filter" class="input-sm" onchange="filterCameras()">
+            <option value="">All Departments</option>
+            <option value="Home Department">Home Department</option>
+            <option value="RTO Gujarat">RTO Gujarat</option>
+            <option value="Food & Civil Supplies">Food & Civil Supplies</option>
+          </select>
+          <button class="btn-sm btn-primary" onclick="loadCameras()"><i class="fas fa-sync"></i> Refresh</button>
+        </div>
+      </div>
+      <div id="gis-map"></div>
+    </div>
+    <div class="panel" style="flex:1;overflow-y:auto">
+      <div class="panel-header"><span><i class="fas fa-list"></i> Camera Inventory</span>
+        <span id="cam-inventory-count" class="tag">0 cameras</span>
+      </div>
+      <div id="camera-list"></div>
+      <div class="panel-header" style="margin-top:12px"><span><i class="fas fa-chart-bar"></i> Department Stats</span></div>
+      <div id="dept-stats"></div>
+    </div>
+  </div>
+
+  <!-- Onboard Camera Form -->
+  <div class="panel" style="margin-top:12px">
+    <div class="panel-header"><i class="fas fa-plus-circle"></i> Onboard New Camera</div>
+    <div class="form-grid">
+      <input id="ob-id" class="input-field" placeholder="Camera ID (e.g. HD-AHMD-NEW-013)" />
+      <input id="ob-name" class="input-field" placeholder="Camera Name" />
+      <select id="ob-dept" class="input-field">
+        <option>Home Department</option>
+        <option>RTO Gujarat</option>
+        <option>Food &amp; Civil Supplies</option>
+      </select>
+      <input id="ob-district" class="input-field" placeholder="District" />
+      <input id="ob-lat" class="input-field" placeholder="Latitude" type="number" step="any" />
+      <input id="ob-lon" class="input-field" placeholder="Longitude" type="number" step="any" />
+      <input id="ob-address" class="input-field" placeholder="Address" />
+      <input id="ob-url" class="input-field" placeholder="Stream URL (RTSP/file)" />
+      <button class="btn btn-primary" onclick="onboardCamera()"><i class="fas fa-satellite-dish"></i> Onboard Camera</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════════
+     TAB 2: LIVE MONITOR
+     ════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-monitor">
+  <div class="panel">
+    <div class="panel-header">
+      <span><i class="fas fa-video"></i> Unified Live Camera Grid</span>
+      <div style="display:flex;gap:8px">
+        <input id="stream-url-input" class="input-field" style="width:300px" placeholder="RTSP URL or video file path" />
+        <input id="stream-cam-id" class="input-field" style="width:180px" placeholder="Camera ID" />
+        <button class="btn btn-primary" onclick="startStream()"><i class="fas fa-play"></i> Connect</button>
+        <button class="btn btn-accent" onclick="connectSentinelSandbox()"><i class="fas fa-satellite"></i> Connect Sentinel</button>
+      </div>
+    </div>
+    <div id="stream-grid" class="stream-grid"></div>
+    <div id="no-streams" class="empty-state">
+      <i class="fas fa-satellite-dish fa-3x"></i>
+      <p>No streams active. Connect an RTSP stream or the Sentinel sandbox above.</p>
+      <p style="font-size:12px;color:#4a7aaa;margin-top:8px">Demo: Use a local video file path as the stream URL</p>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════════
+     TAB 3: ALERTS
+     ════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-alerts">
+  <div class="two-col">
+    <div style="flex:2">
+      <div class="panel">
+        <div class="panel-header">
+          <span><i class="fas fa-bell"></i> Real-Time Alert Feed</span>
+          <div style="display:flex;gap:8px">
+            <select id="alert-filter" class="input-sm" onchange="loadAlerts()">
+              <option value="">All Severities</option>
+              <option value="HIGH">HIGH only</option>
+              <option value="MEDIUM">MEDIUM only</option>
+              <option value="LOW">LOW only</option>
+            </select>
+            <button class="btn-sm btn-primary" onclick="loadAlerts()"><i class="fas fa-sync"></i></button>
+          </div>
+        </div>
+        <div id="alert-list"></div>
+      </div>
+    </div>
+
+    <!-- Demo trigger panel -->
+    <div style="flex:1">
+      <div class="panel">
+        <div class="panel-header"><i class="fas fa-flask"></i> ANPR Demo Trigger</div>
+        <div style="padding:12px;display:flex;flex-direction:column;gap:10px">
+          <label class="field-label">Camera ID</label>
+          <select id="demo-cam" class="input-field">
+            <option value="HD-AHMD-ASHRAM-001">HD-AHMD-ASHRAM-001</option>
+            <option value="RTO-AHMD-NAROL-004">RTO-AHMD-NAROL-004</option>
+            <option value="HD-AHMD-NEHRU-002">HD-AHMD-NEHRU-002</option>
+            <option value="RTO-AHMD-SARDAR-005">RTO-AHMD-SARDAR-005</option>
+          </select>
+          <label class="field-label">Plate Number</label>
+          <input id="demo-plate" class="input-field" value="GJ-01-AB-1234" placeholder="e.g. GJ-01-AB-1234" />
+          <label class="field-label">Confidence</label>
+          <input id="demo-conf" class="input-field" type="number" value="0.91" step="0.01" min="0" max="1" />
+          <label class="field-label">Dwell (seconds)</label>
+          <input id="demo-dwell" class="input-field" type="number" value="45" />
+          <button class="btn btn-danger" onclick="triggerANPRDemo()">
+            <i class="fas fa-bullseye"></i> Trigger ANPR Detection
+          </button>
+          <div style="font-size:11px;color:#4a7aaa">
+            Watchlisted plates: GJ-01-AB-1234 (STOLEN) · GJ-01-CD-5678 (WANTED)
+          </div>
+        </div>
+      </div>
+
+      <!-- Alert Detail Panel -->
+      <div class="panel" id="alert-detail-panel" style="display:none;margin-top:12px">
+        <div class="panel-header"><i class="fas fa-magnifying-glass"></i> Alert Detail</div>
+        <div id="alert-detail-content"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════════
+     TAB 4: VEHICLE JOURNEY
+     ════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-journey">
+  <div class="panel">
+    <div class="panel-header">
+      <span><i class="fas fa-route"></i> Cross-Camera Vehicle Journey Reconstruction</span>
+      <div style="display:flex;gap:8px">
+        <input id="journey-plate" class="input-field" style="width:200px" placeholder="Plate e.g. GJ-01-AB-1234" value="GJ-01-AB-1234" />
+        <button class="btn btn-primary" onclick="searchJourney()"><i class="fas fa-search"></i> Reconstruct Journey</button>
+        <button class="btn btn-accent" onclick="seedDemoJourney()"><i class="fas fa-database"></i> Load Demo Data</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:4px">
+      <div style="flex:2"><div id="journey-map" style="height:460px;border-radius:8px"></div></div>
+      <div style="flex:1;overflow-y:auto;max-height:460px">
+        <div id="journey-timeline"></div>
+      </div>
+    </div>
+    <div id="journey-summary" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════════
+     TAB 5: BLOCKCHAIN
+     ════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-blockchain">
+  <div class="two-col">
+    <div style="flex:1">
+      <div class="panel">
+        <div class="panel-header"><i class="fas fa-link"></i> Evidence Verification Portal</div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <p style="color:#8aa4c8;font-size:13px">Enter an Alert ID to cryptographically verify the evidence clip has not been tampered with.</p>
+          <input id="verify-alert-id" class="input-field" placeholder="Alert ID — e.g. ALT-A1B2C3D4" />
+          <button class="btn btn-primary" onclick="verifyEvidence()"><i class="fas fa-shield-check"></i> Verify on Blockchain</button>
+          <div id="verify-result"></div>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:12px">
+        <div class="panel-header"><i class="fas fa-cube"></i> Blockchain Architecture</div>
+        <div style="padding:12px">
+          <div class="chain-diagram">
+            <div class="chain-node">
+              <div class="chain-node-title">ROOT CA</div>
+              <div class="chain-node-sub">SCRB Gujarat</div>
+            </div>
+            <div class="chain-arrow">→</div>
+            <div class="chain-node">
+              <div class="chain-node-title">FABRIC NETWORK</div>
+              <div class="chain-node-sub">26 Dept Nodes</div>
+            </div>
+            <div class="chain-arrow">→</div>
+            <div class="chain-node">
+              <div class="chain-node-title">IPFS STORAGE</div>
+              <div class="chain-node-sub">Evidence CIDs</div>
+            </div>
+          </div>
+          <div style="margin-top:12px;font-size:12px;color:#4a7aaa">
+            Channel: <span class="tag">evidence-integrity</span>
+            &nbsp;Org: <span class="tag">SCRB-Gujarat</span>
+            &nbsp;TPS: <span class="tag">10,000+</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="flex:2">
+      <div class="panel">
+        <div class="panel-header">
+          <span><i class="fas fa-list"></i> Immutable Ledger — Recent Blocks</span>
+          <button class="btn-sm btn-primary" onclick="loadLedger()"><i class="fas fa-sync"></i> Refresh</button>
+        </div>
+        <div id="ledger-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════════
+     TAB 6: REPORTS
+     ════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-reports">
+  <div class="panel">
+    <div class="panel-header"><i class="fas fa-file-lines"></i> Generate Submission Reports</div>
+    <div style="padding:20px;display:flex;gap:20px;flex-wrap:wrap">
+      <div class="report-card">
+        <div class="report-icon"><i class="fas fa-file-csv"></i></div>
+        <div class="report-title">Detection Report (CSV)</div>
+        <div class="report-desc">Timestamped log of all ANPR detections, watchlist matches, camera IDs, confidence scores, and blockchain hashes.<br><br>Required for Sentinel evaluation output report.</div>
+        <a class="btn btn-primary" href="/api/reports/csv" target="_blank"><i class="fas fa-download"></i> Download CSV</a>
+      </div>
+      <div class="report-card">
+        <div class="report-icon"><i class="fas fa-file-pdf"></i></div>
+        <div class="report-title">Incident Evidence Report (PDF)</div>
+        <div class="report-desc">Formatted PDF with full alert log, risk scores, explainability breakdown, blockchain evidence hashes, and court-admissible metadata.</div>
+        <a class="btn btn-danger" href="/api/reports/pdf" target="_blank"><i class="fas fa-download"></i> Download PDF</a>
+      </div>
+      <div class="report-card">
+        <div class="report-icon"><i class="fas fa-database"></i></div>
+        <div class="report-title">System Health Report</div>
+        <div class="report-desc">Current system status: cameras online/offline, streams active, blockchain blocks, watchlist entries, and alert statistics.</div>
+        <button class="btn btn-accent" onclick="loadHealthReport()"><i class="fas fa-heartbeat"></i> View Health</button>
+        <div id="health-report" style="margin-top:12px;font-size:12px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── ALERT TOAST CONTAINER ─────────────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<!-- ── SCRIPTS ────────────────────────────────────────────────────────────── -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/gis-map.js"></script>
+<script src="/static/js/alerts.js"></script>
+<script src="/static/js/journey.js"></script>
+<script src="/static/js/blockchain.js"></script>
+<script src="/static/js/dashboard.js"></script>
+
+</body>
+</html>
