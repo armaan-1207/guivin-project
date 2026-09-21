@@ -1,0 +1,56 @@
+name: guivin
+services:
+  api:
+    build: .
+    image: guivin:local
+    ports:
+      - "127.0.0.1:8001:8000"
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    stop_grace_period: 60s
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=512m
+      - /app/tmp:rw,nosuid,nodev,size=64m,uid=10001,gid=10001
+    environment:
+      GUIVIN_STATE_DIR: /var/lib/guivin
+      GUIVIN_USERS_FILE: /run/secrets/guivin_users
+      GUIVIN_STREAM_HOSTS: ${GUIVIN_STREAM_HOSTS:-cctv.corp8.cloud,103.250.160.189}
+      GUIVIN_RECORDINGS_DIR: /recordings
+      GUIVIN_OCR_PREPROCESSING: ${GUIVIN_OCR_PREPROCESSING:-preserve}
+      GUIVIN_TILE_URL: ${GUIVIN_TILE_URL-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
+      GUIVIN_MAP_ATTRIBUTION: ${GUIVIN_MAP_ATTRIBUTION:-© OpenStreetMap contributors}
+    volumes:
+      - state:/var/lib/guivin
+      - type: bind
+        source: ./yolov8n.pt
+        target: /models/yolov8n.pt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./tmp/easyocr
+        target: /models/easyocr
+        read_only: true
+        bind:
+          create_host_path: false
+    secrets: [guivin_users]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8000/login', timeout=5); assert r.status == 200"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+secrets:
+  guivin_users:
+    file: ${GUIVIN_USERS_PATH:-./tmp/docker/users.json}
+volumes:
+  state:

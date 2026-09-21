@@ -4,7 +4,7 @@ Handles authentication, camera catalogue fetch, and stream connection.
 
 API summary (from cctv.corp8.cloud/resource):
   Catalogue:  GET https://cctv.corp8.cloud/cameras.json  (session cookie needed)
-  HLS:        https://cctv.corp8.cloud/<id>/index.m3u8   (CDN, works anywhere)
+  HLS:        https://cctv.corp8.cloud/<id>/index.m3u8   (browser access restrictions apply)
   RTSP:       rtsp://<email%40domain>:<password>@103.250.160.189:8554/stream/<id>
   WebRTC:     http://<email%40domain>:<password>@103.250.160.189:8889/stream/<id>/whep
 
@@ -17,9 +17,10 @@ Usage:
 
 import os
 import requests
-import json
 import logging
-from urllib.parse import quote
+import math
+import re
+from urllib.parse import quote, urlsplit
 from typing import List, Dict, Optional
 
 logger = logging.getLogger("guivin.sentinel")
@@ -31,6 +32,50 @@ WEBRTC_PORT    = 8889
 HLS_BASE       = f"https://{SENTINEL_HOST}"
 CATALOGUE_URL  = f"https://{SENTINEL_HOST}/cameras.json"
 LOGIN_URL      = f"https://{SENTINEL_HOST}/auth/login"
+
+
+def validate_camera_id(value):
+    """Only permit a single catalogue path component, never a URL or traversal."""
+    if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}', value):
+        raise ValueError('Invalid Sentinel camera ID')
+    return value
+
+
+def parse_catalogue(raw):
+    """Validate the whole catalogue before registration or stream side effects."""
+    if isinstance(raw, dict):
+        raw = raw.get('cameras', raw.get('feeds'))
+    if not isinstance(raw, list):
+        raise ValueError('Expected a camera catalogue list')
+    cameras, seen = [], set()
+    for cam in raw:
+        if not isinstance(cam, dict):
+            raise ValueError('Invalid camera record')
+        cam_id = validate_camera_id(cam.get('id') or cam.get('camera_id'))
+        if cam_id.upper() in seen:
+            raise ValueError('Duplicate camera ID')
+        seen.add(cam_id.upper())
+        name = cam.get('name') or cam.get('location') or cam_id
+        location = cam.get('location') or cam.get('address') or name
+        if not isinstance(name, str) or not isinstance(location, str):
+            raise ValueError('Invalid camera label')
+        coordinates = {}
+        for key, alias, limit in [('lat', 'latitude', 90), ('lon', 'longitude', 180)]:
+            value = cam.get(key)
+            if value is None:
+                value = cam.get(alias)
+            if value is None:
+                coordinates[key] = None
+                continue
+            if isinstance(value, bool):
+                raise ValueError('Invalid camera coordinate')
+            value = float(value)
+            if not math.isfinite(value) or abs(value) > limit:
+                raise ValueError('Invalid camera coordinate')
+            coordinates[key] = value
+        cameras.append({'id': cam_id, 'name': name, 'location': location,
+                        **coordinates, 'raw': cam})
+    return cameras
 
 
 class SentinelConnector:
@@ -45,25 +90,36 @@ class SentinelConnector:
         self._session.headers.update({"User-Agent": "GUIVIN/1.0 AI-Pipeline"})
         self._cameras: List[Dict] = []
         self._logged_in = False
+        self.last_error = None
 
     # ── Auth ──────────────────────────────────────────────────────────────────
     def login(self) -> bool:
         """POST credentials and store session cookie."""
+        self._logged_in = False
+        self.last_error = None
         try:
             resp = self._session.post(
                 LOGIN_URL,
                 data={"email": self.email, "password": self.password},
-                allow_redirects=True,
+                allow_redirects=False,
                 timeout=15,
             )
-            if resp.status_code == 200 and "auth/login" not in resp.url:
+            # The deployed form redirects successful authentication to the grid.
+            # Do not follow arbitrary redirects or mistake an HTML login page for success.
+            target = urlsplit(resp.headers.get('Location', ''))
+            if (resp.status_code in (302, 303) and target.path == '/'
+                    and target.query == '' and target.fragment == ''
+                    and ((not target.scheme and not target.netloc)
+                         or (target.scheme == 'https' and target.netloc == SENTINEL_HOST))):
                 self._logged_in = True
-                logger.info(f"[Sentinel] Logged in as {self.email}")
+                logger.info('[Sentinel] Authenticated session established')
                 return True
-            logger.error(f"[Sentinel] Login failed — status {resp.status_code}, URL {resp.url}")
+            logger.error('[Sentinel] Login failed: HTTP %s', resp.status_code)
+            self.last_error = 'authentication'
             return False
         except Exception as e:
-            logger.error(f"[Sentinel] Login error: {e}")
+            logger.error('[Sentinel] Login error: %s', type(e).__name__)
+            self.last_error = 'network' if isinstance(e, requests.RequestException) else 'internal'
             return False
 
     # ── Camera catalogue ──────────────────────────────────────────────────────
@@ -72,46 +128,35 @@ class SentinelConnector:
         Fetch the live camera catalogue from cameras.json.
         Returns list of camera dicts with keys: id, name, location, hls_url, rtsp_url.
         """
+        # A failed refresh must never leave the previous catalogue available.
+        self._cameras = []
+        self.last_error = None
         if not self._logged_in:
             if not self.login():
                 return []
 
         try:
-            resp = self._session.get(CATALOGUE_URL, timeout=15)
+            resp = self._session.get(CATALOGUE_URL, timeout=15, allow_redirects=False)
             if resp.status_code != 200:
+                self.last_error = 'authentication' if resp.status_code in (401, 403) else 'catalogue'
+                if self.last_error == 'authentication':
+                    self._logged_in = False
                 logger.error(f"[Sentinel] cameras.json returned {resp.status_code}")
                 return []
 
-            raw = resp.json()
-            # The API may return a list or a dict with a "cameras" key
-            if isinstance(raw, dict):
-                raw = raw.get("cameras", raw.get("feeds", []))
-
-            cameras = []
-            for cam in raw:
-                cam_id = cam.get("id") or cam.get("camera_id") or cam.get("name", "").lower().replace(" ", "")
-                name   = cam.get("name") or cam.get("location") or cam_id
-                loc    = cam.get("location") or cam.get("address") or name
-                lat    = float(cam.get("lat", 0) or cam.get("latitude", 0) or 0)
-                lon    = float(cam.get("lon", 0) or cam.get("longitude", 0) or 0)
-
-                cameras.append({
-                    "id":       cam_id,
-                    "name":     name,
-                    "location": loc,
-                    "lat":      lat,
-                    "lon":      lon,
-                    "hls_url":  self.hls_url(cam_id),
-                    "rtsp_url": self.rtsp_url(cam_id),
-                    "raw":      cam,
-                })
+            cameras = parse_catalogue(resp.json())
+            for cam in cameras:
+                cam['hls_url'] = self.hls_url(cam['id'])
+                cam['rtsp_url'] = self.rtsp_url(cam['id'])
 
             self._cameras = cameras
             logger.info(f"[Sentinel] Fetched {len(cameras)} cameras")
             return cameras
 
         except Exception as e:
-            logger.error(f"[Sentinel] fetch_cameras error: {e}")
+            self._cameras = []
+            self.last_error = 'network' if isinstance(e, requests.RequestException) else 'catalogue'
+            logger.error('[Sentinel] Catalogue error: %s', type(e).__name__)
             return []
 
     # ── URL builders ──────────────────────────────────────────────────────────
@@ -121,24 +166,26 @@ class SentinelConnector:
         Email @ must be percent-encoded as %40.
         rtsp://<email%40domain>:<password>@103.250.160.189:8554/stream/<id>
         """
+        validate_camera_id(camera_id)
         encoded_email = quote(self.email, safe="")  # encodes @ → %40
         return (
-            f"rtsp://{encoded_email}:{self.password}"
+            f"rtsp://{encoded_email}:{quote(self.password, safe='')}"
             f"@{SENTINEL_IP}:{RTSP_PORT}/stream/{camera_id}"
         )
 
     def hls_url(self, camera_id: str) -> str:
         """
-        HLS URL — works via CDN from anywhere (laptop, cloud, restricted network).
-        Requires session cookie; for programmatic use embed password in URL.
+        HLS URL. The deployed service may reject programmatic access even with
+        an authenticated session; RTSP is the verified inference transport.
         """
-        return f"{HLS_BASE}/{camera_id}/index.m3u8"
+        return f"{HLS_BASE}/{validate_camera_id(camera_id)}/index.m3u8"
 
     def webrtc_url(self, camera_id: str) -> str:
         """WebRTC/WHEP URL for browser preview."""
+        validate_camera_id(camera_id)
         encoded_email = quote(self.email, safe="")
         return (
-            f"http://{encoded_email}:{self.password}"
+            f"http://{encoded_email}:{quote(self.password, safe='')}"
             f"@{SENTINEL_IP}:{WEBRTC_PORT}/stream/{camera_id}/whep"
         )
 
@@ -159,99 +206,3 @@ class SentinelConnector:
             )
             cap = cv2.VideoCapture(self.hls_url(camera_id), cv2.CAP_FFMPEG)
         return cap
-
-    # ── Bulk ingest into GUIVIN ───────────────────────────────────────────────
-    def ingest_into_guivin(self, db, start_streams: bool = True,
-                            max_cameras: int = 5) -> List[str]:
-        """
-        Fetch all cameras → register in GUIVIN camera registry → start RTSP streams.
-        Returns list of started camera IDs.
-
-        max_cameras: limit to avoid overwhelming the local machine during demo.
-                     Set to 0 for all 30.
-        """
-        from .camera_registry import add_camera
-        from .stream_manager import stream_manager
-
-        cameras = self.fetch_cameras()
-        if not cameras:
-            logger.error("[Sentinel] No cameras fetched — check credentials")
-            return []
-
-        if max_cameras > 0:
-            cameras = cameras[:max_cameras]
-
-        started = []
-        for cam in cameras:
-            cam_id   = f"SENTINEL-{cam['id'].upper()}"
-            rtsp_url = cam["rtsp_url"]
-
-            # Register in camera registry
-            cam_data = {
-                "id":          cam_id,
-                "name":        cam["name"],
-                "department":  "Home Department",
-                "sub_type":    "Sentinel Feed",
-                "district":    _infer_district(cam["location"]),
-                "lat":         cam["lat"] or _default_lat(cam["location"]),
-                "lon":         cam["lon"] or _default_lon(cam["location"]),
-                "address":     cam["location"],
-                "vendor":      "Sentinel Corp8",
-                "model_name":  "Live Feed",
-                "camera_type": "IP/PTZ",
-                "resolution":  "1080p",
-                "ir_capable":  True,
-                "protocol":    "RTSP",
-                "stream_url":  rtsp_url,
-                "anpr_capable": True,
-                "face_capable": False,
-                "night_capable": True,
-            }
-            try:
-                add_camera(db, cam_data)
-            except Exception:
-                pass  # already exists
-
-            # Start stream
-            if start_streams:
-                stream_manager.add_stream(cam_id, rtsp_url, "Home Department")
-                started.append(cam_id)
-                logger.info(f"[Sentinel] Started stream: {cam_id} → {rtsp_url}")
-
-        return started
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-_DISTRICT_MAP = {
-    "ahmedabad": (23.0225, 72.5714),
-    "surat":     (21.1702, 72.8311),
-    "vadodara":  (22.3072, 73.1812),
-    "rajkot":    (22.3039, 70.8022),
-    "gandhinagar": (23.2156, 72.6369),
-    "junagadh":  (21.5222, 70.4579),
-    "navsari":   (20.9467, 72.9520),
-    "patan":     (23.8493, 72.1266),
-    "morbi":     (22.8173, 70.8378),
-    "bilimora":  (20.7714, 72.9591),
-}
-
-def _infer_district(location: str) -> str:
-    loc_lower = location.lower()
-    for key in _DISTRICT_MAP:
-        if key in loc_lower:
-            return key.title()
-    return "Gujarat"
-
-def _default_lat(location: str) -> float:
-    loc_lower = location.lower()
-    for key, (lat, lon) in _DISTRICT_MAP.items():
-        if key in loc_lower:
-            return lat
-    return 22.96  # Gujarat centre
-
-def _default_lon(location: str) -> float:
-    loc_lower = location.lower()
-    for key, (lat, lon) in _DISTRICT_MAP.items():
-        if key in loc_lower:
-            return lon
-    return 72.60  # Gujarat centre

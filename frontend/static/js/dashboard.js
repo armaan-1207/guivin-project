@@ -2,10 +2,11 @@
 
 // ── WebSocket real-time alerts ─────────────────────────────────────────────
 let ws = null;
+let heartbeat = null;
 let wsReconnectDelay = 2000;
 
 function connectWebSocket() {
-  ws = new WebSocket('ws://localhost:8000/ws');
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
 
   ws.onopen = () => {
     console.log('[WS] Connected');
@@ -13,7 +14,8 @@ function connectWebSocket() {
     const el = document.getElementById('ws-status');
     el.innerHTML = '<i class="fas fa-circle" style="color:#00C853"></i> Live';
     el.title = 'WebSocket connected — real-time alerts active';
-    setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 20000);
+    clearInterval(heartbeat);
+    heartbeat = setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 20000);
   };
 
   ws.onmessage = (e) => {
@@ -28,12 +30,13 @@ function connectWebSocket() {
       }
       if (msg.event === 'alert_updated') loadAlerts();
       if (msg.type === 'sentinel_connected') {
-        showToastRaw(`✅ Sentinel connected — ${msg.cameras_started} cameras live (${msg.protocol})`);
+        showToastRaw(`Sentinel: ${msg.cameras_started} workers started; ${msg.cameras_failed || 0} failed. Check feed health for readiness.`);
       }
     } catch (_) {}
   };
 
   ws.onclose = () => {
+    clearInterval(heartbeat);
     document.getElementById('ws-status').innerHTML =
       '<i class="fas fa-circle" style="color:#666"></i> Reconnecting...';
     setTimeout(connectWebSocket, wsReconnectDelay);
@@ -49,15 +52,12 @@ const hlsInstances = {}; // hls.js instances keyed by cameraId
 
 async function startStream() {
   const url   = document.getElementById('stream-url-input').value.trim();
-  const camId = document.getElementById('stream-cam-id').value.trim() || `DEMO-${Date.now()}`;
+  const camId = document.getElementById('stream-cam-id').value.trim();
+  if (!/^[A-Za-z0-9_-]+$/.test(camId)) { alert('Use letters, digits, underscores or hyphens for Camera ID'); return; }
   if (!url) { alert('Enter a stream URL'); return; }
 
   // Detect if user typed an HLS URL directly
   const isHls = url.endsWith('.m3u8') || url.includes('/index.m3u8');
-  if (isHls) {
-    addStreamCell(camId, url, 'HLS');
-    return;
-  }
 
   const result = await apiPost('/api/stream/start', {
     camera_id: camId, stream_url: url, department: 'Default'
@@ -73,7 +73,15 @@ async function startStream() {
  * @param {string} protocol   — 'HLS' | 'RTSP' | null
  */
 function addStreamCell(cameraId, streamUrl = null, protocol = null) {
-  if (activeStreams[cameraId]) return; // already added
+  if (activeStreams[cameraId]) {
+    clearInterval(activeStreams[cameraId].healthTimer);
+    if (hlsInstances[cameraId]) {
+      hlsInstances[cameraId].destroy();
+      delete hlsInstances[cameraId];
+    }
+    activeStreams[cameraId].cell.remove();
+    delete activeStreams[cameraId];
+  }
 
   const grid  = document.getElementById('stream-grid');
   const noStr = document.getElementById('no-streams');
@@ -102,7 +110,7 @@ function addStreamCell(cameraId, streamUrl = null, protocol = null) {
       </div>
       <div style="padding:6px 10px;font-size:11px;display:flex;justify-content:space-between;color:var(--text-muted)">
         <span id="health-${cameraId}"><i class="fas fa-circle" style="color:var(--amber)"></i> CONNECTING</span>
-        <span id="fps-${cameraId}">HLS · AI Active</span>
+        <span id="fps-${cameraId}">HLS · Check analysis status</span>
       </div>`;
     grid.appendChild(cell);
     activeStreams[cameraId] = { cell, protocol: 'HLS', streamUrl };
@@ -117,8 +125,8 @@ function addStreamCell(cameraId, streamUrl = null, protocol = null) {
            onerror="this.alt='Stream unavailable'"
            style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#0a1628" />
       <div style="padding:6px 10px;font-size:11px;display:flex;justify-content:space-between;color:var(--text-muted)">
-        <span id="health-${cameraId}"><i class="fas fa-circle" style="color:var(--green)"></i> OPERATIONAL</span>
-        <span id="fps-${cameraId}">RTSP · AI Active</span>
+        <span id="health-${cameraId}"><i class="fas fa-circle" style="color:var(--amber)"></i> CONNECTING</span>
+        <span id="fps-${cameraId}">Capture · Check analysis status</span>
       </div>`;
     grid.appendChild(cell);
     activeStreams[cameraId] = { cell, protocol: 'RTSP' };
@@ -134,12 +142,15 @@ function addStreamCell(cameraId, streamUrl = null, protocol = null) {
                     health.status === 'OFFLINE'      ? 'var(--amber)' :
                     health.status === 'TAMPERED'     ? 'var(--red)'   : 'var(--amber)';
       // For HLS streams, OFFLINE in backend is normal (no RTSP) — override display
-      const displayStatus = (useHls && health.status === 'OFFLINE') ? 'HLS LIVE' : health.status;
-      const displayColor  = (useHls && health.status === 'OFFLINE') ? 'var(--green)' : color;
+      const displayStatus = health.status;
+      const displayColor = color;
       el.innerHTML = `<i class="fas fa-circle" style="color:${displayColor}"></i> ${displayStatus}`;
       if (health.reason) el.title = health.reason;
+      const ai = document.getElementById('fps-' + cameraId);
+      if (ai) ai.textContent = 'AI: ' + (health.ai_status || 'NOT_STARTED');
     }
   }, 5000);
+  activeStreams[cameraId].healthTimer = healthTimer;
 }
 
 function _attachHlsPlayer(cameraId, hlsUrl) {
@@ -166,7 +177,7 @@ function _attachHlsPlayer(cameraId, hlsUrl) {
     hls.loadSource(hlsUrl);
     hls.attachMedia(video);
     hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); });
-    hls.on(Hls.Events.MEDIA_ATTACHED, onPlay);
+    video.addEventListener('playing', onPlay);
     hls.on(Hls.Events.ERROR, (_, data) => {
       if (data.fatal) { console.warn(`[HLS] Fatal error for ${cameraId}:`, data); onErr(); }
     });
@@ -183,7 +194,32 @@ function _attachHlsPlayer(cameraId, hlsUrl) {
   }
 }
 
-function removeStreamCell(cameraId) {
+async function removeStreamCell(cameraId) {
+  const entry = activeStreams[cameraId];
+  if (!entry || entry.stopping) return;
+  entry.stopping = true;
+  const button = entry.cell.querySelector('.stream-stop');
+  button.disabled = true;
+  button.textContent = 'Stopping…';
+  const result = await apiPost(`/api/stream/${cameraId}/stop`, {});
+  if (!result) {
+    entry.stopping = false; button.disabled = false; button.textContent = 'Retry Stop';
+    showToastRaw('Stop request failed. Please retry.'); return;
+  }
+  if (!result.stopped) {
+    const healthLabel = document.getElementById(`health-${cameraId}`);
+    if (healthLabel) healthLabel.textContent = 'STOPPING — waiting for the current operation';
+    let stopped = false;
+    for (let attempt = 0; attempt < 30; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const health = await apiFetch(`/api/stream/${cameraId}/health`);
+      if (health?.status === 'NOT_STREAMING') { stopped = true; break; }
+    }
+    if (!stopped) {
+      entry.stopping = false; button.disabled = false; button.textContent = 'Check Stop';
+      showToastRaw('Stop requested; the worker is still finishing. Check Stop to confirm.'); return;
+    }
+  }
   // Destroy hls.js instance if exists
   if (hlsInstances[cameraId]) {
     hlsInstances[cameraId].destroy();
@@ -191,32 +227,61 @@ function removeStreamCell(cameraId) {
   }
   const cell = document.getElementById(`stream-cell-${cameraId}`);
   if (cell) cell.remove();
+  clearInterval(activeStreams[cameraId]?.healthTimer);
   delete activeStreams[cameraId];
   if (Object.keys(activeStreams).length === 0) {
     document.getElementById('no-streams').style.display = '';
   }
   // Stop backend stream
-  apiFetch(`/api/stream/${cameraId}/health`).catch(() => {});
+
 }
 
 // ── Sentinel connect flow ───────────────────────────────────────────────────
-async function connectSentinelSandbox() {
-  const email = prompt('Enter your cctv.corp8.cloud email:');
-  if (!email) return;
-  const password = prompt('Enter your Sentinel access password (e.g. XXXX-XXXX-XXXX):');
-  if (!password) return;
-  const maxCams = parseInt(prompt('How many cameras? (1–30, recommended: 5):', '5') || '5');
-
-  // Always use HLS — port 8554 is usually blocked on restricted networks.
-  // The browser already has the cctv.corp8.cloud session cookie → HLS works.
-  const useHls = true;
-
-  const params = new URLSearchParams({ email, password, max_cameras: maxCams, use_hls: useHls });
-  showToastRaw('⏳ Connecting to Sentinel sandbox...');
-
-  const r = await apiPost(`/api/sentinel/connect?${params}`, {});
-  if (r?.connected) {
-    r.streams_started.forEach(s => {
+let sentinelConnecting = false;
+function openSentinelForm() {
+  document.getElementById('sentinel-form').hidden = false;
+  document.getElementById('sentinel-email').focus();
+}
+function closeSentinelForm() {
+  if (sentinelConnecting) return;
+  document.getElementById('sentinel-password').value = '';
+  document.getElementById('sentinel-form').hidden = true;
+  document.querySelector('[aria-controls="sentinel-form"]').focus();
+}
+async function connectSentinelSandbox(event) {
+  event.preventDefault();
+  const form = document.getElementById('sentinel-form');
+  if (sentinelConnecting || !form.reportValidity()) return;
+  const status = document.getElementById('sentinel-status');
+  const passwordInput = document.getElementById('sentinel-password');
+  const payload = {email: document.getElementById('sentinel-email').value.trim(),
+    password: passwordInput.value, max_cameras: Number(document.getElementById('sentinel-count').value), use_hls: false};
+  sentinelConnecting = true;
+  document.getElementById('sentinel-submit').disabled = true;
+  document.getElementById('sentinel-cancel').disabled = true;
+  form.setAttribute('aria-busy', 'true');
+  status.textContent = 'Connecting to Camera Grid…';
+  try {
+    // Backend establishes its own session; browser portal cookies are not reused.
+    const response = await fetch('/api/sentinel/connect', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    const r = await response.json().catch(() => ({}));
+    const started = Array.isArray(r.streams_started) ? r.streams_started : [];
+    const failed = Array.isArray(r.streams_failed) ? r.streams_failed : [];
+    if (!response.ok || (!r.connected && !failed.length)) {
+      const messages = {401:'Connection rejected. Check your Camera Grid credentials and GUIVIN login session.',
+        403:'Your GUIVIN account is not permitted to connect these cameras.',
+        422:'Check the email, password and camera count.',
+        502:'Camera Grid catalogue is unavailable. Try again shortly.',
+        503:'GUIVIN cannot reach Camera Grid. Check the server network connection and try again.'};
+      status.textContent = messages[response.status] || 'Connection failed. Please try again.';
+      return;
+    }
+    const failures = failed.map(s => `${s.camera_id}: ${s.reason === 'PREVIOUS_WORKER_STOPPING'
+      ? 'previous worker is still stopping; wait until stopped, then retry'
+      : 'worker could not start; check camera health and retry'}`).join('; ');
+    status.textContent = `${r.cameras_registered} cameras registered; ${started.length} workers started; ${failed.length} failed. Check feed health for readiness.${failures ? ' ' + failures + '.' : ''}`;
+    started.forEach(s => {
       // Remap HLS URL → our local proxy (avoids CORS from cctv.corp8.cloud)
       let streamUrl = s.stream_url;
       if (s.protocol === 'HLS') {
@@ -225,9 +290,15 @@ async function connectSentinelSandbox() {
       addStreamCell(s.camera_id, streamUrl, s.protocol);
     });
     loadCameras();
-    showToastRaw(`✅ ${r.cameras_fetched} Sentinel cameras live via proxied HLS`);
-  } else {
-    alert('❌ Connection failed — check email/password at cctv.corp8.cloud and try again.');
+  } catch (_) {
+    status.textContent = 'Could not finish connecting. Check the connection and Live Monitor before retrying.';
+  } finally {
+    passwordInput.value = '';
+    payload.password = '';
+    sentinelConnecting = false;
+    document.getElementById('sentinel-submit').disabled = false;
+    document.getElementById('sentinel-cancel').disabled = false;
+    form.removeAttribute('aria-busy');
   }
 }
 
@@ -244,8 +315,9 @@ function showToastRaw(message) {
 
 // ── Health report ──────────────────────────────────────────────────────────
 async function loadHealthReport() {
-  const h = await apiFetch('/api/health');
+  let h = await apiFetch('/api/health');
   if (!h) return;
+  h = displayData(h);
   document.getElementById('health-report').innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
       <div class="dept-stat-row"><span>Status</span><strong style="color:var(--green)">${h.status.toUpperCase()}</strong></div>
@@ -265,11 +337,30 @@ function updateClock() {
 }
 
 // ── App init ───────────────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
-  connectWebSocket();
-  loadCameras();
-  loadAlerts();
-  updateClock();
-  setInterval(updateClock, 1000);
-  setInterval(loadAlerts, 10000);
+window.addEventListener('DOMContentLoaded', async () => {
+  window.currentUser = await apiFetch('/api/auth/me');
+  if (!window.currentUser) return;
+  const me = window.currentUser;
+  document.getElementById('mode-label').textContent = me.mode === 'local-only' ? 'Local-only development · representative watchlists' : `${me.username} · ${me.role} · ${me.department}`;
+  const restricted = {judiciary:['cases'], auditor:['alerts','blockchain'], technical_admin:['reports']};
+  const allowed = restricted[userRole()];
+  if (allowed) {
+    document.querySelectorAll('.tab').forEach(tab => { tab.hidden = !allowed.some(name => tab.getAttribute('onclick')?.includes("'" + name + "'")); });
+    document.getElementById('ws-status').textContent = 'Read-only access';
+    if (userRole() === 'technical_admin') {
+      document.querySelectorAll('.report-card').forEach(card => { card.hidden = !card.querySelector('#health-report'); });
+      loadHealthReport();
+    }
+    switchTab(allowed[0]);
+  } else {
+    connectWebSocket(); loadCameras(); loadAlerts();
+    apiFetch('/api/streams/active').then(data => data?.active?.forEach(id => addStreamCell(id)));
+    apiFetch('/api/cameras').then(cameras => {
+      if (!cameras) return;
+      const select = document.getElementById('stream-cam-id');
+      cameras.forEach(cam => { const option = document.createElement('option'); option.value = cam.id; option.textContent = cam.name + ' (' + cam.id + ')'; select.appendChild(option); });
+    });
+  }
+  updateClock(); setInterval(updateClock, 1000);
+  if (!['judiciary','technical_admin'].includes(userRole())) setInterval(loadAlerts, 10000);
 });

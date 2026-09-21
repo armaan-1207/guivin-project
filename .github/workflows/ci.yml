@@ -36,3 +36,6 @@ jobs:
           curl -sf http://localhost:8000/api/cameras | python3 -c "import json,sys; d=json.load(sys.stdin); assert len(d)>=12, f'expected >=12 cameras, got {len(d)}'; print(f'Cameras OK: {len(d)}')"
           curl -sf http://localhost:8000/api/watchlist | python3 -c "import json,sys; d=json.load(sys.stdin); assert len(d)>=8, 'watchlist empty'; print(f'Watchlist OK: {len(d)}')"
           curl -sf http://localhost:8000/api/watchlist/check/GJ01AB1234 | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['matched'], 'plate not matched'; print('Watchlist check OK')"
+
+      - name: Acceptance regression tests
+        run: python -m unittest discover -s tests -v

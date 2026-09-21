@@ -1,163 +1,198 @@
 # GUIVIN — Gujarat Unified Intelligent Video Intelligence Network
 
-> **Hackathon:** Sentinel Gujarat | **Problem:** Model 1 — Centralised CCTV Registry + AI Intelligence Layer
+> **From camera feeds to actionable investigations.**
+>
+> Built for **Sentinel Gujarat 2026** · Camera intelligence · Contextual alerts · Evidence verification
 
-GUIVIN is a full-stack AI-powered CCTV analytics platform built on top of the Sentinel Gujarat camera grid. It provides real-time ANPR (Automatic Number Plate Recognition), vehicle journey reconstruction, blockchain-anchored evidence, and an ACI (Anomaly & Context Intelligence) engine — all through a single unified dashboard.
+GUIVIN brings camera monitoring, AI-assisted vehicle analysis and investigation workflows into one dashboard. Operators can locate cameras on a map, analyze authorized feeds, review alerts, trace vehicle sightings and organize evidence into cases.
+
+**Register → Monitor → Detect → Review → Investigate**
+
+[Features](#features) · [Quick Start](#quick-start) · [Sentinel Integration](#sentinel-integration) · [Architecture](#architecture) · [Documentation](#documentation)
 
 ---
 
 ## Features
 
-| Feature | Details |
-|---|---|
-| 📷 GIS Camera Registry | 12+ seed cameras across Gujarat with Leaflet map |
-| 🔍 ANPR (Live + Demo) | YOLOv8n + EasyOCR, processes every 5th frame |
-| 🚗 Vehicle Journey | Cross-camera journey reconstruction with timestamps |
-| 🔗 Blockchain Ledger | SHA-256 tamper-evident chain anchoring every alert |
-| ⚠️ Watchlist Engine | VAHAN + eGujCop mock DB, stolen/wanted/blacklisted plates |
-| 📊 ACI Baseline | Anomaly scoring per camera based on historical baselines |
-| 📡 Live Streams | HLS via proxied backend (CORS-free), MJPEG for local RTSP |
-| 🌐 Sentinel Sandbox | Connects to cctv.corp8.cloud — 30 live Gujarat cameras |
-| 🔒 Encrypted Evidence | Evidence frames stored with SHA-256 fingerprints |
-| 📄 Reports | CSV + PDF report generation |
+- **📷 GIS Camera Registry** — Search and onboard cameras, inspect worker health and display declared coverage on a Leaflet map. Cameras without verified coordinates remain in the inventory.
+- **🔍 AI-Assisted ANPR** — YOLOv8n vehicle detection, EasyOCR recognition, multi-line plate assembly and repeated-observation voting.
+- **📡 Live Monitor** — Authorized RTSP analysis, recorded-video processing, annotated previews and per-camera Start/Stop controls.
+- **🌐 Sentinel Integration** — Camera Grid authentication, catalogue import and individual connection results for successful and failed workers.
+- **⚠️ Alerts & Watchlists** — Representative watchlist matching, evidence-linked alerts and independent supervisor review for high-severity dismissals.
+- **📊 Adaptive Camera Intelligence** — Versioned statistical baselines with coverage gates, approval and rollback, alongside opt-in region, tripwire, crowd and loitering rules.
+- **🚗 Vehicle Journeys** — Time-filtered sightings across cameras, pagination and topology-based correlation with uncertainty indicators.
+- **🗂️ Case Management** — Link alerts, assign supervisors, escalate investigations and grant scoped judiciary access.
+- **🔗 Evidence Integrity** — Captured frames, sampled pre/post-event clips and a local SHA-256 hash chain with verification and download controls.
+- **🔐 Role-Based Access** — Seven operator and oversight roles with department, camera and case-level permissions.
+- **📄 Reports** — Incident CSV/PDF exports, detection records and offline evaluation tools.
 
----
+## Architecture
+
+```mermaid
+flowchart LR
+    A[Authorized camera feeds / recordings] --> B[Capture workers]
+    B --> C[Vehicle detection and tracking]
+    C --> D[Plate recognition and temporal voting]
+    C --> E[Scene rules and ACI]
+    D --> F[Sightings and watchlist checks]
+    E --> G[Alerts and evidence]
+    F --> G
+    G --> H[Review and case management]
+    G --> I[Local evidence hash chain]
+    J[Camera registry and scoped access] --> B
+    J --> H
+```
+
+FastAPI connects the dashboard to capture workers, analytics and investigation workflows. SQLite stores application records, while captured evidence is stored separately and checked against the local hash chain. Docker Compose packages the application for a single host.
 
 ## Quick Start
 
-```bash
-# 1. Clone
-git clone https://github.com/YOUR_USERNAME/guivin.git
-cd guivin/backend
+### Docker Compose
 
-# 2. Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Start server
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-Open **http://localhost:8000** in your browser.
-
----
-
-## Connecting to Sentinel Sandbox (cctv.corp8.cloud)
-
-1. Register at [cctv.corp8.cloud](https://cctv.corp8.cloud)
-2. Open **Live Monitor** tab → click **Connect Sentinel**
-3. Enter your registered email + access password
-4. Choose number of cameras (1–30)
-
-Stream URL format used internally:
-```
-HLS:  https://cctv.corp8.cloud/<id>/index.m3u8  (proxied via /api/proxy/hls/)
-RTSP: rtsp://email%40domain:password@103.250.160.189:8554/stream/<id>
-```
-
----
-
-## Project Structure
-
-```
-guivin/
-├── backend/
-│   ├── app/
-│   │   ├── main.py              # FastAPI — all routes + WebSocket
-│   │   ├── ai_pipeline.py       # YOLOv8n + EasyOCR ANPR
-│   │   ├── stream_manager.py    # RTSP/HLS capture threads + MJPEG
-│   │   ├── sentinel_connector.py# cctv.corp8.cloud auth + catalogue
-│   │   ├── alert_manager.py     # Alert creation + dedup + blockchain
-│   │   ├── blockchain_ledger.py # SHA-256 tamper-evident chain
-│   │   ├── watchlist_engine.py  # Plate lookup — VAHAN/eGujCop mock
-│   │   ├── aci_engine.py        # Anomaly & Context Intelligence
-│   │   ├── camera_registry.py   # Camera CRUD + GeoJSON
-│   │   ├── report_generator.py  # CSV + PDF reports
-│   │   ├── database.py          # SQLAlchemy models
-│   │   └── config.py            # Paths + constants
-│   ├── data/
-│   │   ├── cameras.json         # 12 seed cameras
-│   │   ├── watchlist.json       # 8 watchlist entries
-│   │   └── aci_baselines.json   # 6 camera ACI baselines
-│   └── requirements.txt
-├── frontend/
-│   ├── index.html               # 6-tab dashboard
-│   └── static/
-│       ├── css/styles.css
-│       └── js/
-│           ├── api.js
-│           ├── dashboard.js     # Streams + Sentinel connect
-│           ├── gis-map.js       # Leaflet GIS
-│           ├── alerts.js        # Alert feed
-│           ├── journey.js       # Journey reconstruction
-│           └── blockchain.js    # Ledger + verify
-├── anpr_runner.py               # Standalone CLI ANPR script
-├── run.sh                       # One-command startup
-└── README.md
-```
-
----
-
-## API Endpoints
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/health` | System health |
-| GET | `/api/cameras` | All cameras |
-| GET | `/api/cameras/geojson` | GeoJSON for map |
-| GET | `/api/alerts` | All alerts |
-| POST | `/api/alerts/demo/anpr` | Trigger demo ANPR alert |
-| GET | `/api/journey/{plate}` | Vehicle journey |
-| GET | `/api/blockchain/ledger` | Blockchain blocks |
-| POST | `/api/blockchain/verify` | Verify evidence |
-| GET | `/api/watchlist/check/{plate}` | Watchlist lookup |
-| POST | `/api/sentinel/connect` | Connect sandbox |
-| GET | `/api/proxy/hls/{cam}/index.m3u8` | Proxied HLS stream |
-| GET | `/api/reports/csv` | Download CSV report |
-| GET | `/api/reports/pdf` | Download PDF report |
-
-Full interactive docs: **http://localhost:8000/docs**
-
----
-
-## Standalone ANPR
-
-Process any video file or RTSP stream without the full server:
+Use Docker Desktop with Linux containers, or Docker Engine with Compose. First prepare model files and generate the local account using the [deployment guide](deploy/README.md).
 
 ```bash
-python anpr_runner.py \
-  --source /path/to/video.mp4 \
-  --camera-id DEMO-001 \
-  --output report.csv
+# Run from the project root after setup
+docker compose build
+docker compose up -d
 ```
 
----
+Open **http://localhost:8001**. Sign in as `local-admin` using the generated password stored locally in `tmp/docker/admin-password.txt`.
+
+```bash
+# Stop the app while keeping its database and evidence
+docker compose stop
+```
+
+Docker is the verified local inference runtime. Use one API instance; model files and credentials are mounted separately from the image, and application state is retained in a Docker volume.
+
+### Native development — Python 3.11
+
+On a machine that supports the project's PyTorch/OpenCV dependencies:
+
+```powershell
+python -m venv .venv
+./.venv/Scripts/python.exe -m pip install -r backend/requirements.txt
+./.venv/Scripts/python.exe tools/setup_models.py --download
+./run-local.ps1
+```
+
+Open **http://localhost:8000**. The Windows launcher binds to loopback. Without a configured account file, this runs in local development mode. See the deployment guide for the tested Windows runtime compatibility note and account setup.
+
+## Sentinel Integration
+
+1. Sign in to GUIVIN and open **Live Monitor → Connect Sentinel**.
+2. Enter your authorized Camera Grid email and access password.
+3. Start with one camera, then inspect its preview and health status.
+4. Review the started/failed worker results before adding more cameras.
+
+The tested integration uses **RTSP over TCP**. Sentinel sandbox recordings are labeled **RECORDED**; demo-generated alerts are labeled **SIMULATED**. If an old worker is still stopping, wait for it to finish before retrying. Credentials are cleared from the connection form after the request.
+
+## Operator Workflow
+
+1. **Register** — Import or onboard cameras and confirm available location metadata.
+2. **Monitor** — Start authorized feeds and inspect capture/inference health.
+3. **Review** — Open alerts, examine frames and sampled clips, and verify evidence integrity.
+4. **Investigate** — Search plate sightings, inspect journey uncertainty and link relevant alerts to a case.
+5. **Coordinate** — Assign scoped reviewers, escalate cases and export reports.
+
+Supported roles: **Field Operator, Sector Supervisor, Department Head, SCRB Administrator, Technical Administrator, Auditor and Judiciary**. Access is scoped to the account's permitted resources.
 
 ## Tech Stack
 
-- **Backend:** FastAPI + SQLAlchemy (SQLite) + Uvicorn
-- **AI:** YOLOv8n (Ultralytics) + EasyOCR
-- **Streams:** OpenCV RTSP/TCP + HLS proxy
-- **Security:** SHA-256 blockchain ledger, HMAC evidence signing
-- **Frontend:** Vanilla JS + Leaflet.js + hls.js
-- **Sandbox:** cctv.corp8.cloud (30 live Gujarat cameras)
+- **Backend:** Python · FastAPI · SQLAlchemy · SQLite · Uvicorn
+- **Computer vision:** YOLOv8n · EasyOCR · OpenCV · ByteTrack-style association
+- **Frontend:** HTML/CSS · Vanilla JavaScript · Leaflet · hls.js
+- **Streaming:** RTSP/TCP ingestion · MJPEG previews · HLS proxy support
+- **Evidence:** SHA-256 hashing · Local chain verification · Sampled video clips
+- **Deployment:** Docker Compose · External model mounts · Persistent state volume
 
----
+## Project Structure
 
-## Demo Data (pre-seeded)
+```text
+guivin-project/
+├── backend/
+│   ├── app/
+│   │   ├── main.py             # FastAPI routes and WebSocket updates
+│   │   ├── ai_pipeline.py      # Vehicle detection and plate recognition
+│   │   ├── tracking.py         # Within-camera tracking and plate consensus
+│   │   ├── stream_manager.py   # Capture, inference workers and stream health
+│   │   ├── sentinel_connector.py # Camera Grid authentication and catalogue
+│   │   ├── camera_registry.py  # Camera onboarding, metadata and GIS
+│   │   ├── alert_manager.py    # Alerts and evidence capture
+│   │   ├── aci_learning.py     # Baseline candidates, approval and versions
+│   │   ├── scene_rules.py      # Regions, tripwires, crowd and loitering rules
+│   │   ├── cases.py            # Case workflows and scoped assignments
+│   │   ├── clip_evidence.py    # Sampled pre/post-event video evidence
+│   │   ├── blockchain_ledger.py # Local evidence chain and verification
+│   │   ├── auth.py             # Account authentication and sessions
+│   │   ├── permissions.py      # Role and resource access checks
+│   │   └── database.py         # Models, persistence and schema upgrades
+│   ├── data/                   # Representative seed cameras and watchlists
+│   └── requirements.txt
+├── frontend/
+│   ├── index.html              # Operator dashboard
+│   └── static/
+│       ├── css/styles.css      # Dashboard styling
+│       └── js/
+│           ├── dashboard.js   # Stream controls and real-time updates
+│           ├── gis-map.js     # Map, registry and coverage controls
+│           ├── alerts.js      # Alert feed and review actions
+│           ├── journey.js     # Vehicle sighting searches
+│           ├── operations.js  # ACI review, clips and case management
+│           └── blockchain.js  # Evidence ledger and integrity checks
+├── deploy/                     # Container setup and deployment guide
+├── tests/                      # Backend and connection-handler regression tests
+├── tools/                      # Model setup, accounts, evaluation and backups
+├── anpr_runner.py              # Standalone processing entry point
+├── compose.yaml
+└── Dockerfile
+```
 
-| Plate | Status | Risk |
-|---|---|---|
-| GJ-01-AB-1234 | STOLEN | HIGH (70) |
-| GJ-01-CD-5678 | WANTED | HIGH (70) |
-| MH-12-IJ-7890 | WANTED | HIGH (70) |
-| GJ-05-EF-9012 | BLACKLISTED | MEDIUM (55) |
+## API Endpoints
 
----
+Interactive API documentation is available at **http://localhost:8001/docs** when running Docker. The API covers camera registration, stream control, alerts, vehicle journeys, evidence, ACI profiles, cases and reports.
+
+Selected endpoints:
+
+- **Registry:** `GET /api/cameras`, `GET /api/cameras/geojson`, `POST /api/cameras/bulk` — List, map and import cameras.
+- **Monitoring:** `POST /api/stream/start`, `POST /api/stream/{camera_id}/stop`, `GET /api/stream/{camera_id}/health` — Control processing and inspect camera health.
+- **Sentinel:** `POST /api/sentinel/connect` — Authenticate, import selected cameras and request worker startup.
+- **Alerts:** `GET /api/alerts`, `POST /api/alerts/{alert_id}/acknowledge` — Retrieve and acknowledge alerts.
+- **Journeys:** `GET /api/journey/{plate}` — Search time-filtered vehicle sightings.
+- **Evidence:** `GET /api/evidence/{alert_id}/clip/preview`, `GET /api/evidence/{alert_id}/clip/verify` — Preview a sampled clip and verify its integrity.
+- **Ledger:** `GET /api/blockchain/ledger`, `POST /api/blockchain/verify` — Inspect and verify the local evidence chain.
+- **ACI:** `GET /api/aci/{camera_id}/profiles`, `POST /api/aci/{camera_id}/profiles/{profile_id}/approve` — Inspect baseline versions and approve a candidate.
+- **Reports:** `GET /api/reports/csv`, `GET /api/reports/pdf`, `GET /api/reports/detections` — Export incidents and detection records.
+- **System:** `GET /api/health` — Inspect service and model readiness.
+
+Protected endpoints enforce account permissions and resource scope. See the interactive API for request bodies, filters and response schemas.
+
+## Validation
+
+Regression coverage includes scoped access, evidence verification, camera onboarding, source timing, OCR processing and connection failures. The latest verification passed **87 Python tests** and **four JavaScript connection-handler scenarios**.
+
+```bash
+node tests/test_sentinel_ui.cjs
+```
+
+The project includes offline OCR comparisons, evaluation metrics and backup verification tools. Model assets, credentials, evidence and downloaded datasets stay outside version control.
+
+## Documentation
+
+- [Deployment guide](deploy/README.md) — Docker setup, model preparation and accounts.
+- [Interactive API](http://localhost:8001/docs) — Explore endpoints with the Docker app running.
+- [Tests](tests/) — Regression coverage for backend behavior and connection handling.
+- [Security policy](SECURITY.md) — Security reporting information.
+
+## Project Status
+
+GUIVIN is a hackathon prototype with implemented monitoring and investigation workflows. Watchlists are representative demo data. Evidence verification currently uses a local hash chain; Fabric/IPFS integration, encrypted evidence storage and distributed deployment remain roadmap work. Journey correlations and AI alerts support operator review rather than establish identity or legal conclusions.
+
+## Future Scope
+
+The next phase focuses on stronger plate recognition across varied road conditions, calibrated cross-camera correlation and richer scene learning. Deployment work will target sustained multi-camera processing, coordinated workers and shared services before Kubernetes scaling. Planned evidence and security enhancements include Fabric/IPFS integration, encrypted storage and stronger identity controls, supported by broader evaluation on authorized footage.
 
 ## License
 
-MIT — built for Sentinel Gujarat Hackathon 2026.
+[MIT](LICENSE) — built for Sentinel Gujarat 2026. Third-party models, libraries and evaluation datasets retain their own licenses.

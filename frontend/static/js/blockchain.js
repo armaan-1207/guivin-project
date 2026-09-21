@@ -1,8 +1,9 @@
 /* blockchain.js — Blockchain ledger and evidence verification */
 
 async function loadLedger() {
-  const data = await apiFetch('/api/blockchain/ledger?limit=30');
+  let data = await apiFetch('/api/blockchain/ledger?limit=30');
   if (!data) return;
+  data = displayData(data);
   const el = document.getElementById('ledger-list');
 
   if (!data.length) {
@@ -44,15 +45,16 @@ async function verifyEvidence() {
   const alertId = document.getElementById('verify-alert-id').value.trim();
   if (!alertId) { alert('Enter an Alert ID'); return; }
 
-  const result = await apiPost('/api/blockchain/verify', { alert_id: alertId });
+  let result = await apiPost('/api/blockchain/verify', { alert_id: alertId });
   const el = document.getElementById('verify-result');
   if (!result) { el.innerHTML = '<div class="verify-fail">Failed to connect to blockchain service.</div>'; return; }
 
+  result = displayData(result);
   if (result.verified) {
     el.innerHTML = `
       <div class="verify-ok">
-        <div style="font-size:16px;font-weight:700;margin-bottom:8px"><i class="fas fa-circle-check"></i> CLIP INTEGRITY VERIFIED ✓</div>
-        <div class="verify-row">Chain Status: <span style="font-weight:700">INTACT — No tampering detected</span></div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:8px"><i class="fas fa-circle-check"></i> EVIDENCE BYTES VERIFIED ✓</div>
+        <div class="verify-row">Chain Status: <span style="font-weight:700">${result.chain_status}</span></div>
         <div class="verify-row">Alert ID: <span>${result.alert_id}</span></div>
         <div class="verify-row">Block: <span>#${result.block_number}</span></div>
         <div class="verify-row">Transaction: <span>${result.tx_id}</span></div>
@@ -62,7 +64,7 @@ async function verifyEvidence() {
         <div class="verify-row">Channel: <span>${result.channel}</span></div>
         <div class="verify-row">Organisation: <span>${result.org}</span></div>
         <div style="margin-top:10px;font-size:11px;color:rgba(0,200,83,.8)">
-          This evidence clip is cryptographically guaranteed to be in its original state.
+          ${result.trust_scope}
           Verified at ${new Date(result.verification_time).toLocaleTimeString('en-IN')}.
         </div>
       </div>`;

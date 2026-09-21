@@ -1,0 +1,14 @@
+**
+!backend/
+!backend/app/
+!backend/app/**
+!backend/data/
+!backend/data/**
+!backend/requirements.txt
+!frontend/
+!frontend/**
+!deploy/
+!deploy/container_entrypoint.py
+!Dockerfile
+**/__pycache__/
+**/*.pyc

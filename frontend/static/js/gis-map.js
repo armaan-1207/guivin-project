@@ -2,6 +2,7 @@
 let gisMap = null;
 let allCameras = [];
 let markers = [];
+let coverageLayer = null;
 
 const DEPT_COLORS = {
   'Home Department':       '#1E90FF',
@@ -18,11 +19,8 @@ function initGISMap() {
   if (gisMap) return;
   gisMap = L.map('gis-map', { center: [22.96, 72.60], zoom: 9 });
 
-  // Dark tile layer
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap © CartoDB',
-    maxZoom: 19,
-  }).addTo(gisMap);
+  addBasemap(gisMap);
+  coverageLayer = L.layerGroup().addTo(gisMap);
 }
 
 async function loadCameras() {
@@ -31,22 +29,27 @@ async function loadCameras() {
   const stats   = await apiFetch('/api/cameras/stats');
   if (!geoData) return;
 
-  allCameras = geoData.features.map(f => ({ ...f.properties, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }));
+  allCameras = geoData.features.map(f => ({ ...f.properties, lat: f.geometry?.coordinates[1] ?? null, lon: f.geometry?.coordinates[0] ?? null }));
 
   // Update counts
   document.getElementById('cam-count').textContent = geoData.metadata?.total || allCameras.length;
   document.getElementById('cam-inventory-count').textContent = `${geoData.metadata?.online || 0} online / ${allCameras.length} total`;
 
-  renderMarkers(allCameras);
-  renderCameraList(allCameras);
+  filterCameras();
   if (stats) renderDeptStats(stats, allCameras.length);
 }
 
 function renderMarkers(cameras) {
+  coverageLayer.clearLayers();
   markers.forEach(m => gisMap.removeLayer(m));
   markers = [];
   cameras.forEach(cam => {
+    if (!Number.isFinite(cam.lat) || !Number.isFinite(cam.lon)) return;
     const color = deptColor(cam.department);
+    if (document.getElementById('gis-coverage').checked && Number(cam.coverage_radius_m) > 0) {
+      L.circle([cam.lat,cam.lon],{radius:Number(cam.coverage_radius_m),color,fillOpacity:.08,weight:1})
+        .bindTooltip('Declared radius only; terrain and field of view are not verified').addTo(coverageLayer);
+    }
     const size  = cam.health === 'OFFLINE' ? 10 : (cam.anpr ? 14 : 12);
 
     const icon = L.divIcon({
@@ -72,6 +75,7 @@ function renderMarkers(cameras) {
 }
 
 function buildPopup(cam) {
+  cam = displayData(cam);
   const healthClass = cam.health === 'OPERATIONAL' ? 'health-ok' : cam.health === 'DEGRADED' ? 'health-deg' : 'health-off';
   const anprBadge   = cam.anpr ? '<span class="tag" style="background:#0a2040;border-color:#1E90FF;color:#1E90FF">ANPR</span>' : '';
   const nightBadge  = cam.night ? '<span class="tag" style="margin-left:4px">Night</span>' : '';
@@ -90,18 +94,20 @@ function buildPopup(cam) {
 }
 
 function renderCameraList(cameras) {
+  cameras = displayData(cameras);
   const el = document.getElementById('camera-list');
   el.innerHTML = cameras.map(cam => `
-    <div class="camera-item" onclick="focusCamera('${cam.id}','${cam.lat}','${cam.lon}')">
+    <div class="camera-item" ${cam.location_known === false ? '' : `onclick="focusCamera('${cam.id}','${cam.lat}','${cam.lon}')"`}>
       <div class="cam-dot ${cam.health === 'OPERATIONAL' ? 'online' : cam.health === 'DEGRADED' ? 'degraded' : 'offline'}"></div>
       <div>
         <div class="cam-name">${cam.name}</div>
-        <div class="cam-sub">${cam.department} · ${cam.district}</div>
+        <div class="cam-sub">${cam.department} · ${cam.location_known === false ? 'Location unverified' : cam.district}</div>
       </div>
     </div>`).join('');
 }
 
 function renderDeptStats(stats, total) {
+  stats = displayData(stats);
   const el = document.getElementById('dept-stats');
   el.innerHTML = stats.map(s => {
     const pct = total > 0 ? (s.total / total * 100) : 0;
@@ -122,7 +128,8 @@ function focusCamera(id, lat, lon) {
 
 function filterCameras() {
   const dept = document.getElementById('dept-filter').value;
-  const filtered = dept ? allCameras.filter(c => c.department === dept) : allCameras;
+  const health = document.getElementById('gis-health').value;
+  const filtered = allCameras.filter(c => (!dept || c.department === dept) && (!health || c.health === health));
   renderMarkers(filtered);
   renderCameraList(filtered);
 }

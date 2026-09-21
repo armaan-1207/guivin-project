@@ -86,3 +86,27 @@ temp/
 *.tmp
 *.bak
 *.orig
+
+# Local state, credentials, private keys and evaluation inputs
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3
+state/
+datasets/
+recordings/
+users.json
+*-password.txt
+*.pem
+*.key
+*.p12
+*.pfx
+*.pth
+*.safetensors
+node_modules/
+
+# Private project planning and local verification documents
+/IMPLEMENTATION_PLAN.md
+/SENTINEL_GUIVIN_PROJECT_DOCUMENT.md
+/LOCAL_CHECK.md

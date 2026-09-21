@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/static/css/styles.css" />
 </head>
 <body>
+<div id="mode-label" style="padding:6px 16px;background:#182338;color:#ccd5e2;font-size:12px">Loading access mode…</div>
 
 <!-- ── TOP NAV ─────────────────────────────────────────────────────────────── -->
 <nav class="topnav">
@@ -37,6 +38,8 @@
   <button class="tab" onclick="switchTab('alerts')"><i class="fas fa-bell"></i> Alerts <span class="badge" id="alert-badge">0</span></button>
   <button class="tab" onclick="switchTab('journey')"><i class="fas fa-route"></i> Vehicle Journey</button>
   <button class="tab" onclick="switchTab('blockchain')"><i class="fas fa-link"></i> Blockchain</button>
+  <button class="tab" onclick="switchTab('aci')">ACI Review</button>
+  <button class="tab" onclick="switchTab('cases')">Cases</button>
   <button class="tab" onclick="switchTab('reports')"><i class="fas fa-file-lines"></i> Reports</button>
 </div>
 
@@ -57,6 +60,10 @@
           </select>
           <button class="btn-sm btn-primary" onclick="loadCameras()"><i class="fas fa-sync"></i> Refresh</button>
         </div>
+      </div>
+      <div style="padding:8px;display:flex;gap:12px;flex-wrap:wrap">
+        <label><input id="gis-coverage" type="checkbox" onchange="filterCameras()"> Declared coverage radius (approximate)</label>
+        <label>Health <select id="gis-health" onchange="filterCameras()"><option value="">All states</option><option>OPERATIONAL</option><option>DEGRADED</option><option>OFFLINE</option><option>NOT_STREAMING</option><option>CONNECTING</option><option>STALE</option><option>TAMPERED</option><option>STOPPING</option><option>STOPPED</option><option>ENDED</option></select></label>
       </div>
       <div id="gis-map"></div>
     </div>
@@ -100,11 +107,24 @@
       <span><i class="fas fa-video"></i> Unified Live Camera Grid</span>
       <div style="display:flex;gap:8px">
         <input id="stream-url-input" class="input-field" style="width:300px" placeholder="RTSP URL or video file path" />
-        <input id="stream-cam-id" class="input-field" style="width:180px" placeholder="Camera ID" />
+        <select id="stream-cam-id" class="input-field" style="width:250px" aria-label="Registered camera"></select>
         <button class="btn btn-primary" onclick="startStream()"><i class="fas fa-play"></i> Connect</button>
-        <button class="btn btn-accent" onclick="connectSentinelSandbox()"><i class="fas fa-satellite"></i> Connect Sentinel</button>
+        <button class="btn btn-accent" onclick="openSentinelForm()" aria-controls="sentinel-form"><i class="fas fa-satellite"></i> Connect Sentinel</button>
       </div>
     </div>
+    <form id="sentinel-form" hidden style="padding:16px" onsubmit="connectSentinelSandbox(event)">
+      <p>Connect using your Camera Grid account at cctv.corp8.cloud.</p>
+      <div class="form-grid">
+        <label>Email <input id="sentinel-email" class="input-field" type="email" autocomplete="username" maxlength="254" required></label>
+        <label>Access password <input id="sentinel-password" class="input-field" type="password" autocomplete="off" maxlength="200" required></label>
+        <label>Camera count <input id="sentinel-count" class="input-field" type="number" min="1" max="50" step="1" value="1" required></label>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button id="sentinel-submit" class="btn btn-primary" type="submit">Connect cameras</button>
+        <button id="sentinel-cancel" class="btn" type="button" onclick="closeSentinelForm()">Close</button>
+      </div>
+      <p id="sentinel-status" role="status" aria-live="polite"></p>
+    </form>
     <div id="stream-grid" class="stream-grid"></div>
     <div id="no-streams" class="empty-state">
       <i class="fas fa-satellite-dish fa-3x"></i>
@@ -186,6 +206,13 @@
         <button class="btn btn-accent" onclick="seedDemoJourney()"><i class="fas fa-database"></i> Load Demo Data</button>
       </div>
     </div>
+    <div class="form-grid">
+      <label>From (local time)<input id="journey-start" type="datetime-local" class="input-field"></label>
+      <label>To (local time)<input id="journey-end" type="datetime-local" class="input-field"></label>
+      <div><button id="journey-prev" class="btn-sm btn-primary" disabled onclick="searchJourney(Math.max(0,journeyOffset-50))">Previous</button>
+      <button id="journey-next" class="btn-sm btn-primary" disabled onclick="searchJourney(journeyOffset+50)">Next</button></div>
+      <p id="journey-page" role="status"></p>
+    </div>
     <div style="display:flex;gap:12px;margin-top:4px">
       <div style="flex:2"><div id="journey-map" style="height:460px;border-radius:8px"></div></div>
       <div style="flex:1;overflow-y:auto;max-height:460px">
@@ -205,35 +232,35 @@
       <div class="panel">
         <div class="panel-header"><i class="fas fa-link"></i> Evidence Verification Portal</div>
         <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
-          <p style="color:#8aa4c8;font-size:13px">Enter an Alert ID to cryptographically verify the evidence clip has not been tampered with.</p>
+          <p style="color:#8aa4c8;font-size:13px">Enter an Alert ID to cryptographically verify captured evidence matches its stored digest and local chain.</p>
           <input id="verify-alert-id" class="input-field" placeholder="Alert ID — e.g. ALT-A1B2C3D4" />
           <button class="btn btn-primary" onclick="verifyEvidence()"><i class="fas fa-shield-check"></i> Verify on Blockchain</button>
           <div id="verify-result"></div>
         </div>
       </div>
       <div class="panel" style="margin-top:12px">
-        <div class="panel-header"><i class="fas fa-cube"></i> Blockchain Architecture</div>
+        <div class="panel-header"><i class="fas fa-cube"></i> Evidence integrity scope</div>
         <div style="padding:12px">
           <div class="chain-diagram">
             <div class="chain-node">
-              <div class="chain-node-title">ROOT CA</div>
-              <div class="chain-node-sub">SCRB Gujarat</div>
+              <div class="chain-node-title">EVIDENCE</div>
+              <div class="chain-node-sub">Captured bytes</div>
             </div>
             <div class="chain-arrow">→</div>
             <div class="chain-node">
-              <div class="chain-node-title">FABRIC NETWORK</div>
-              <div class="chain-node-sub">26 Dept Nodes</div>
+              <div class="chain-node-title">LOCAL HASH CHAIN</div>
+              <div class="chain-node-sub">Single-process ledger</div>
             </div>
             <div class="chain-arrow">→</div>
             <div class="chain-node">
-              <div class="chain-node-title">IPFS STORAGE</div>
-              <div class="chain-node-sub">Evidence CIDs</div>
+              <div class="chain-node-title">LOCAL STORAGE</div>
+              <div class="chain-node-sub">Frames and metadata</div>
             </div>
           </div>
           <div style="margin-top:12px;font-size:12px;color:#4a7aaa">
             Channel: <span class="tag">evidence-integrity</span>
             &nbsp;Org: <span class="tag">SCRB-Gujarat</span>
-            &nbsp;TPS: <span class="tag">10,000+</span>
+            &nbsp;TPS: <span class="tag">Not benchmarked</span>
           </div>
         </div>
       </div>
@@ -241,7 +268,7 @@
     <div style="flex:2">
       <div class="panel">
         <div class="panel-header">
-          <span><i class="fas fa-list"></i> Immutable Ledger — Recent Blocks</span>
+          <span><i class="fas fa-list"></i> Local Hash Ledger — Recent Blocks</span>
           <button class="btn-sm btn-primary" onclick="loadLedger()"><i class="fas fa-sync"></i> Refresh</button>
         </div>
         <div id="ledger-list"></div>
@@ -259,14 +286,15 @@
     <div style="padding:20px;display:flex;gap:20px;flex-wrap:wrap">
       <div class="report-card">
         <div class="report-icon"><i class="fas fa-file-csv"></i></div>
-        <div class="report-title">Detection Report (CSV)</div>
-        <div class="report-desc">Timestamped log of all ANPR detections, watchlist matches, camera IDs, confidence scores, and blockchain hashes.<br><br>Required for Sentinel evaluation output report.</div>
+        <div class="report-title">Incident Report (CSV)</div>
+        <div class="report-desc">Timestamped log of alert-generating ANPR detections, watchlist matches, camera IDs, confidence scores, and blockchain hashes.<br><br>Required for Sentinel evaluation output report.</div>
+        <a class="btn" href="/api/reports/detections" target="_blank">Export detections</a>
         <a class="btn btn-primary" href="/api/reports/csv" target="_blank"><i class="fas fa-download"></i> Download CSV</a>
       </div>
       <div class="report-card">
         <div class="report-icon"><i class="fas fa-file-pdf"></i></div>
         <div class="report-title">Incident Evidence Report (PDF)</div>
-        <div class="report-desc">Formatted PDF with full alert log, risk scores, explainability breakdown, blockchain evidence hashes, and court-admissible metadata.</div>
+        <div class="report-desc">Formatted PDF with full alert log, risk scores, explainability breakdown, blockchain evidence hashes, and event metadata.</div>
         <a class="btn btn-danger" href="/api/reports/pdf" target="_blank"><i class="fas fa-download"></i> Download PDF</a>
       </div>
       <div class="report-card">
@@ -276,6 +304,36 @@
         <button class="btn btn-accent" onclick="loadHealthReport()"><i class="fas fa-heartbeat"></i> View Health</button>
         <div id="health-report" style="margin-top:12px;font-size:12px"></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="tab-content" id="tab-aci">
+  <div class="panel">
+    <div class="panel-header">Camera baseline review</div>
+    <div style="padding:16px">
+      <p>Only approved baselines affect risk. Learning requires sufficient live observations over at least 72 hours.</p>
+      <label for="aci-camera">Camera</label>
+      <select id="aci-camera" class="input-field" onchange="loadACIProfiles()"></select>
+      <button class="btn btn-primary" onclick="loadACIProfiles()">Refresh profiles</button>
+      <button id="aci-build" class="btn btn-accent" onclick="buildACIProfile()">Build candidate</button>
+      <p id="aci-message" role="status" aria-live="polite"></p>
+      <div id="aci-profiles"></div>
+    </div>
+  </div>
+</div>
+<div class="tab-content" id="tab-cases">
+  <div class="panel">
+    <div class="panel-header">Case workspace <button class="btn-sm btn-primary" onclick="loadCases()">Refresh</button></div>
+    <div style="padding:16px">
+      <form id="case-create" onsubmit="createCaseFromForm(event)" class="form-grid">
+        <label>Case title <input id="case-title" class="input-field" required maxlength="160"></label>
+        <label>Initial alert ID <input id="case-alert" class="input-field" required maxlength="80"></label>
+        <button class="btn btn-primary" type="submit">Create case</button>
+      </form>
+      <p id="case-message" role="status" aria-live="polite"></p>
+      <div id="supervisor-reviews" hidden></div>
+      <div class="two-col"><div id="case-list" style="flex:1"></div><div id="case-detail" style="flex:2"></div></div>
     </div>
   </div>
 </div>
@@ -291,6 +349,7 @@
 <script src="/static/js/alerts.js"></script>
 <script src="/static/js/journey.js"></script>
 <script src="/static/js/blockchain.js"></script>
+<script src="/static/js/operations.js"></script>
 <script src="/static/js/dashboard.js"></script>
 
 </body>

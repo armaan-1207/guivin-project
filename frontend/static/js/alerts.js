@@ -29,6 +29,7 @@ function renderAlertList(alerts) {
 }
 
 function renderAlertCard(a) {
+  a = displayData(a);
   const ts = new Date(a.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const plate = a.plate_number ? `<span class="plate-badge">${a.plate_number}</span>` : '';
   const chainBadge = a.block_id ? `<span class="chain-badge"><i class="fas fa-link"></i> Block #${a.block_id}</span>` : '';
@@ -47,7 +48,7 @@ function renderAlertCard(a) {
       </div>
       ${plate}
       <div class="risk-bar"><div class="risk-fill" style="width:${a.risk_score}%;background:${riskColor(a.risk_score)}"></div></div>
-      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Risk Score: <strong style="color:${riskColor(a.risk_score)}">${a.risk_score}/100</strong></div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">${a.origin || "UNKNOWN"} · Risk Score: <strong style="color:${riskColor(a.risk_score)}">${a.risk_score}/100</strong></div>
       <ul class="reason-list">${reasons}</ul>
       ${chainBadge}
       <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Status: <strong>${a.status}</strong></div>
@@ -55,7 +56,8 @@ function renderAlertCard(a) {
 }
 
 async function showAlertDetail(alertId) {
-  const alert = activeAlerts.find(a => a.id === alertId);
+  const found = activeAlerts.find(a => a.id === alertId);
+  const alert = found ? displayData(found) : null;
   if (!alert) return;
 
   const panel = document.getElementById('alert-detail-panel');
@@ -102,9 +104,18 @@ async function showAlertDetail(alertId) {
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="acknowledgeAlert('${alert.id}','ACKNOWLEDGED')">Acknowledge</button>
         <button class="btn btn-accent"  onclick="acknowledgeAlert('${alert.id}','VERIFIED')">Mark Verified</button>
+        <button class="btn btn-primary" onclick="acknowledgeAlert('${alert.id}','ESCALATED')">Escalate</button>
+        <button class="btn btn-accent" onclick="acknowledgeAlert('${alert.id}','CLOSED')">Close alert</button>
         <button class="btn" style="background:var(--bg-secondary);color:var(--text-muted);border:1px solid var(--border)" onclick="acknowledgeAlert('${alert.id}','FALSE_ALARM')">False Alarm</button>
       </div>
     </div>`;
+  const clip = document.createElement('div');
+  content.appendChild(clip);
+  if (userRole() !== 'auditor') mountClipControls(clip, alertId);
+  content.querySelectorAll('button[onclick^="acknowledgeAlert"]').forEach(button => {
+    const readonly = ['viewer','auditor','judiciary','technical_admin'].includes(userRole());
+    button.hidden = readonly || (userRole() === 'field_operator' && !button.getAttribute('onclick').includes('ACKNOWLEDGED'));
+  });
 }
 
 async function acknowledgeAlert(alertId, action) {

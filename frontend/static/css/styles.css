@@ -1,4 +1,5 @@
 /* ── GUIVIN Dashboard Styles ───────────────────────────────────────────────── */
+[hidden] { display: none !important; }
 :root {
   --bg-primary:    #0A1628;
   --bg-secondary:  #0f1f3a;
@@ -163,11 +164,13 @@ body {
 }
 .stream-cell img { width: 100%; display: block; aspect-ratio: 16/9; object-fit: cover; }
 .stream-label {
+  pointer-events: none; z-index: 1;
   position: absolute; top: 0; left: 0; right: 0;
   background: linear-gradient(to bottom, rgba(0,0,0,.7), transparent);
   padding: 6px 10px; font-size: 11px; color: white; font-weight: 600;
 }
 .stream-stop {
+  z-index: 2;
   position: absolute; top: 6px; right: 8px;
   background: rgba(255,68,68,.8); border: none; color: white;
   border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 11px;
@@ -304,3 +307,17 @@ body {
 ::-webkit-scrollbar       { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg-primary); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+#tab-monitor .panel-header { flex-wrap: wrap; gap: 12px; }
+#tab-monitor .panel-header > div { flex-wrap: wrap; max-width: 100%; }
+#tab-monitor .input-field { max-width: 100%; min-width: 0; }
+.stream-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
+.tab-bar { overflow-x: auto; }
+.tab { flex-shrink: 0; }
+#tab-journey .panel-header, #tab-journey .panel-header > div { flex-wrap: wrap; }
+#case-detail, #case-list { min-width: 0; overflow-wrap: anywhere; }
+#case-list button { display: block; margin-bottom: 8px; text-align: left; }
+.map-notice { background: var(--bg-panel); color: var(--text-primary); padding: 6px; max-width: 260px; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+#case-detail > button, #supervisor-reviews button { margin: 6px 4px 6px 0; }
+@media (max-width: 760px) { #tab-cases .two-col { flex-direction: column; } }

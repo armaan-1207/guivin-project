@@ -1,30 +1,38 @@
 /* journey.js — Cross-camera vehicle journey reconstruction */
 let journeyMap = null;
 let journeyLayer = null;
+let journeyOffset = 0;
+let journeyQuery = null;
 
 function initJourneyMap() {
   if (journeyMap) return;
   journeyMap = L.map('journey-map', { center: [23.02, 72.57], zoom: 12 });
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap © CartoDB', maxZoom: 19
-  }).addTo(journeyMap);
+  addBasemap(journeyMap);
   journeyLayer = L.layerGroup().addTo(journeyMap);
 }
 
-async function searchJourney() {
+async function searchJourney(offset = 0) {
   const plate = document.getElementById('journey-plate').value.trim();
   if (!plate) { alert('Enter a plate number'); return; }
 
   initJourneyMap();
-  const data = await apiFetch(`/api/journey/${encodeURIComponent(plate)}`);
-  if (!data) return;
+  if (offset === 0) journeyQuery = {plate, start:document.getElementById('journey-start').value, end:document.getElementById('journey-end').value};
+  const query = new URLSearchParams({limit:50,offset});
+  for (const name of ['start','end']) if (journeyQuery[name]) query.set(name, new Date(journeyQuery[name]).toISOString());
+  let data;
+  try { data = await operation(`/api/journey/${encodeURIComponent(journeyQuery.plate)}?${query}`); }
+  catch (e) { document.getElementById('journey-page').textContent = e.message; return; }
+  journeyOffset = offset;
+  document.getElementById('journey-prev').disabled = offset === 0;
+  document.getElementById('journey-next').disabled = !data.has_more;
+  document.getElementById('journey-page').textContent = `Page ${Math.floor(offset / 50) + 1} · up to 50 sightings · travel checks apply within this page`;
 
   journeyLayer.clearLayers();
   document.getElementById('journey-summary').innerHTML = '';
 
   if (!data.journey?.length) {
     document.getElementById('journey-timeline').innerHTML =
-      `<div class="empty-state"><i class="fas fa-search fa-2x"></i><p>No sightings found for <strong>${plate}</strong>.<br>Use "Load Demo Data" to seed test journey data.</p></div>`;
+      `<div class="empty-state"><i class="fas fa-search fa-2x"></i><p>No sightings found for <strong>${escapeHTML(plate)}</strong>.<br>Use "Load Demo Data" to seed test journey data.</p></div>`;
     return;
   }
 
@@ -34,6 +42,7 @@ async function searchJourney() {
 }
 
 function renderJourneyOnMap(journey, plate) {
+  journey = displayData(journey);
   const latlngs = [];
 
   journey.forEach((sighting, i) => {
@@ -103,6 +112,7 @@ function renderJourneyOnMap(journey, plate) {
 }
 
 function renderJourneyTimeline(journey, plate) {
+  journey = displayData(journey); plate = escapeHTML(plate);
   const el = document.getElementById('journey-timeline');
   el.innerHTML = `<div style="padding:10px 12px;font-size:12px;color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--border)">
     Journey: <span class="plate-badge">${plate}</span> · ${journey.length} sightings
@@ -124,6 +134,7 @@ function renderJourneyTimeline(journey, plate) {
             <span class="plate-badge">${s.plate_number}</span>
             <span style="font-size:11px;color:var(--text-muted);margin-left:6px">Conf: ${(s.plate_confidence*100).toFixed(1)}%</span>
           </div>
+          <div style="font-size:12px;margin-top:6px;color:var(--text-secondary)">Travel check: ${s.correlation?.status?.replace(/_/g, ' ') || 'UNASSESSED'} · identity unconfirmed</div>
           ${s.alert_id ? `<div style="font-size:11px;color:var(--accent-blue);margin-top:2px"><i class="fas fa-bell"></i> Alert: ${s.alert_id}</div>` : ''}
         </div>
       </div>`;
@@ -131,6 +142,7 @@ function renderJourneyTimeline(journey, plate) {
 }
 
 function renderJourneySummary(data) {
+  data = displayData(data);
   if (!data.journey?.length) return;
   const first = data.journey[0];
   const last  = data.journey[data.journey.length - 1];
@@ -139,7 +151,7 @@ function renderJourneySummary(data) {
   const dur   = Math.round((end - start) / 60000);
 
   document.getElementById('journey-summary').innerHTML = `
-    <div class="panel" style="padding:12px">
+    <div class="panel" style="padding:12px"><p>Observed camera sequence; lines are not verified road routes. Travel checks do not confirm identity.</p>
       <div style="display:flex;gap:24px;flex-wrap:wrap">
         <div style="text-align:center"><div style="font-size:28px;font-weight:800;color:var(--accent-blue)">${data.total_sightings}</div><div style="font-size:11px;color:var(--text-muted)">Camera Sightings</div></div>
         <div style="text-align:center"><div style="font-size:28px;font-weight:800;color:var(--accent-blue)">${dur}</div><div style="font-size:11px;color:var(--text-muted)">Minutes Total</div></div>

@@ -5,16 +5,25 @@ Generates anomaly risk scores when behavior deviates from normal.
 """
 import json
 from datetime import datetime
+from .time_utils import IST
 from typing import Optional
 from sqlalchemy.orm import Session
 
-from .database import ACIBaselineDB
+from .database import ACIBaselineDB, ACIProfileDB
+from .source_origin import is_sentinel_camera
 
 
 NIGHT_HOURS = list(range(22, 24)) + list(range(0, 6))   # 10PM – 6AM
 
 
 def get_baseline(db: Session, camera_id: str) -> Optional[dict]:
+    if is_sentinel_camera(camera_id):
+        return None
+    profile = db.query(ACIProfileDB).filter_by(camera_id=camera_id, status='ACTIVE').first()
+    if profile:
+        return dict(json.loads(profile.features), camera_id=camera_id,
+                    version=profile.id, validated=True, origin='LEARNED_SAMPLED',
+                    validated_by=profile.approved_by)
     bl = db.query(ACIBaselineDB).filter(ACIBaselineDB.camera_id == camera_id).first()
     if not bl:
         return None
@@ -28,6 +37,7 @@ def get_baseline(db: Session, camera_id: str) -> Optional[dict]:
         "night_occupancy_rate": bl.night_occupancy_rate,
         "version": bl.version,
         "validated": bl.validated,
+        "origin": "SEEDED_RULES",
     }
 
 
@@ -38,12 +48,12 @@ def evaluate_dwell_anomaly(camera_id: str, dwell_seconds: float,
     Returns: {anomaly: bool, risk_delta: int, reason: str}
     """
     baseline = get_baseline(db, camera_id)
-    if not baseline:
+    if not baseline or not baseline['validated']:
         return {"anomaly": False, "risk_delta": 0, "reason": "No baseline"}
 
     avg_dwell = baseline["avg_dwell_seconds"]
     ratio = dwell_seconds / avg_dwell if avg_dwell > 0 else 1.0
-    hour = datetime.utcnow().hour
+    hour = datetime.now(IST).hour
     is_night = hour in NIGHT_HOURS
 
     # Night multiplier — anomalies at night carry more weight
@@ -73,10 +83,10 @@ def evaluate_dwell_anomaly(camera_id: str, dwell_seconds: float,
 def evaluate_night_presence(camera_id: str, object_class: str, db: Session) -> dict:
     """Evaluate if presence at this hour is anomalous for this camera."""
     baseline = get_baseline(db, camera_id)
-    hour = datetime.utcnow().hour
+    hour = datetime.now(IST).hour
     is_night = hour in NIGHT_HOURS
 
-    if not baseline or not is_night:
+    if not baseline or not baseline['validated'] or not is_night:
         return {"anomaly": False, "risk_delta": 0, "reason": "Daytime — normal"}
 
     night_rate = baseline["night_occupancy_rate"]
