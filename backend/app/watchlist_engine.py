@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from .database import WatchlistDB
 from .config import DATA_DIR
+from .time_utils import utc_iso
 
 
 # ── Indian plate normaliser ──────────────────────────────────────────────────
@@ -27,7 +28,7 @@ def seed_watchlist_if_empty(db: Session):
     if db.query(WatchlistDB).count() == 0:
         wl_file = DATA_DIR / "watchlist.json"
         if wl_file.exists():
-            entries = json.loads(wl_file.read_text())
+            entries = json.loads(wl_file.read_text(encoding="utf-8"))
             for e in entries:
                 db.add(WatchlistDB(**e))
             db.commit()
@@ -76,7 +77,7 @@ def get_all_watchlist(db: Session) -> List[dict]:
             "owner_name": e.owner_name,
             "additional_info": e.additional_info,
             "priority": e.priority,
-            "added_at": e.added_at.isoformat() if e.added_at else "",
+            "added_at": utc_iso(e.added_at) if e.added_at else "",
         }
         for e in entries
     ]
