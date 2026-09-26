@@ -47,37 +47,48 @@ FastAPI connects the dashboard to capture workers, analytics and investigation w
 
 ## Quick Start
 
-### Docker Compose
+### 1. Clone the Repository
+Begin by cloning the project to your local machine:
+```bash
+git clone https://github.com/your-org/guivin-project.git
+cd guivin-project
+```
 
-Use Docker Desktop with Linux containers, or Docker Engine with Compose. First prepare model files and generate the local account using the [deployment guide](deploy/README.md).
+### 2. Run with Docker (Recommended)
+The easiest way to run GUIVIN with its full AI pipeline is using Docker Desktop (with Linux containers).
 
 ```bash
-# Run from the project root after setup
+# Build and start the services in the background
 docker compose build
 docker compose up -d
 ```
+*Note: The first run may take a few minutes to download the AI models and base images.*
 
-Open **http://localhost:8001**. Sign in as `local-admin` using the generated password stored locally in `tmp/docker/admin-password.txt`.
+**Access the Dashboard:**
+Open **http://localhost:8001** in your web browser. 
+Sign in with the username `local-admin`. The auto-generated password is saved in `tmp/docker/admin-password.txt` on your first run.
 
 ```bash
-# Stop the app while keeping its database and evidence
+# To stop the application (your database and evidence will be saved)
 docker compose stop
 ```
 
-Docker is the verified local inference runtime. Use one API instance; model files and credentials are mounted separately from the image, and application state is retained in a Docker volume.
-
-### Native development — Python 3.11
-
-On a machine that supports the project's PyTorch/OpenCV dependencies:
+### 3. Native Python Setup (Optional)
+If you prefer running without Docker, ensure you have Python 3.11 installed.
 
 ```powershell
+# Create a virtual environment and install dependencies
 python -m venv .venv
-./.venv/Scripts/python.exe -m pip install -r backend/requirements.txt
-./.venv/Scripts/python.exe tools/setup_models.py --download
-./run-local.ps1
-```
+.\.venv\Scripts\Activate.ps1
+pip install -r backend/requirements.txt
 
-Open **http://localhost:8000**. The Windows launcher binds to loopback. Without a configured account file, this runs in local development mode. See the deployment guide for the tested Windows runtime compatibility note and account setup.
+# Download AI models
+python tools/setup_models.py --download
+
+# Start the local development server
+.\run-local.ps1
+```
+Open **http://localhost:8000** in your browser.
 
 ## Sentinel Integration
 

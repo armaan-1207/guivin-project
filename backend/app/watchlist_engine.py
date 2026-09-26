@@ -35,12 +35,17 @@ def seed_watchlist_if_empty(db: Session):
             print(f"[WatchlistEngine] Seeded {len(entries)} watchlist entries")
 
 
+from .vahan_mock import lookup_vahan
+
 def check_plate(db: Session, plate_raw: str) -> Optional[dict]:
-    """Check if a plate number is in any watchlist. Returns match or None."""
+    """Check if a plate number is in any watchlist or VAHAN. Returns match or None."""
     plate = normalise_plate(plate_raw)
-    # Also try without dashes
     plate_nodash = plate.replace('-', '')
 
+    # 1. External Database Mock (VAHAN / CCTNS)
+    vahan_info = lookup_vahan(plate_nodash)
+    
+    # 2. Local Watchlist DB
     entry = (
         db.query(WatchlistDB)
         .filter(
@@ -49,10 +54,12 @@ def check_plate(db: Session, plate_raw: str) -> Optional[dict]:
         )
         .all()
     )
+    
+    matched = None
     for e in entry:
         db_id = normalise_plate(e.identifier)
         if db_id == plate or db_id.replace('-', '') == plate_nodash:
-            return {
+            matched = {
                 "matched": True,
                 "identifier": e.identifier,
                 "normalised": plate,
@@ -62,6 +69,27 @@ def check_plate(db: Session, plate_raw: str) -> Optional[dict]:
                 "additional_info": e.additional_info,
                 "priority": e.priority,
             }
+            break
+
+    # If local DB matched, return that. If VAHAN flagged it, return VAHAN.
+    if matched:
+        # Merge VAHAN owner if local is missing
+        if not matched.get("owner_name") and vahan_info["owner"] != "UNKNOWN":
+            matched["owner_name"] = vahan_info["owner"]
+        return matched
+        
+    if vahan_info.get("stolen_flag") or vahan_info.get("wanted_flag"):
+        return {
+            "matched": True,
+            "identifier": plate_nodash,
+            "normalised": plate,
+            "reason": vahan_info.get("alert_context", "Flagged by CCTNS/VAHAN"),
+            "source_db": "VAHAN/CCTNS",
+            "owner_name": vahan_info.get("owner", "Unknown"),
+            "additional_info": f"Registration: {vahan_info.get('registration_status', 'Unknown')}",
+            "priority": "CRITICAL" if vahan_info.get("stolen_flag") else "HIGH",
+        }
+        
     return None
 
 

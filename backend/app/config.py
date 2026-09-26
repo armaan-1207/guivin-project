@@ -21,11 +21,17 @@ MODEL_DIR = BASE_DIR.parent / 'tmp' / 'models'
 os.environ.setdefault('YOLO_CONFIG_DIR', str(BASE_DIR.parent / 'tmp' / 'yolo'))
 os.environ.setdefault('MPLCONFIGDIR', str(BASE_DIR.parent / 'tmp' / 'matplotlib'))
 os.environ.setdefault('EASYOCR_MODULE_PATH', str(BASE_DIR.parent / 'tmp' / 'easyocr'))
+os.environ.setdefault('PADDLE_HOME', str(BASE_DIR.parent / 'tmp' / '.paddle'))
+os.environ.setdefault('PADDLEX_HOME', str(BASE_DIR.parent / 'tmp' / '.paddlex'))
 os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp'
 
 # AI Settings
 YOLO_MODEL = os.getenv('YOLO_MODEL', str(BASE_DIR.parent / 'yolov8n.pt'))
 PLATE_MODEL = os.getenv('GUIVIN_PLATE_MODEL', '')
+ANPR_BACKEND = os.getenv('GUIVIN_ANPR_BACKEND', 'easyocr').lower()
+if ANPR_BACKEND not in {'easyocr', 'fast_alpr'}:
+    raise ValueError('GUIVIN_ANPR_BACKEND must be easyocr or fast_alpr')
+ANPR_MODEL_DIR = os.getenv('GUIVIN_ANPR_MODEL_DIR', str(BASE_DIR.parent / 'tmp' / 'fast-alpr'))
 DETECTION_INTERVAL = 5             # Process every Nth frame
 CONFIDENCE_THRESHOLD = 0.45
 PLATE_CONFIDENCE_THRESHOLD = 0.3

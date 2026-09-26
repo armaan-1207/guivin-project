@@ -1,8 +1,7 @@
 name: guivin
 services:
   api:
-    build: .
-    image: guivin:local
+    image: guivin:anpr-paddle
     ports:
       - "127.0.0.1:8001:8000"
     restart: unless-stopped
@@ -23,6 +22,12 @@ services:
       GUIVIN_OCR_PREPROCESSING: ${GUIVIN_OCR_PREPROCESSING:-preserve}
       GUIVIN_TILE_URL: ${GUIVIN_TILE_URL-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
       GUIVIN_MAP_ATTRIBUTION: ${GUIVIN_MAP_ATTRIBUTION:-© OpenStreetMap contributors}
+      GUIVIN_ANPR_BACKEND: fast_alpr
+      GUIVIN_ANPR_MODEL_DIR: /models/fast-alpr
+      PADDLEX_HOME: /app/tmp/paddlex
+      PADDLE_HOME: /app/tmp/paddle
+      HOME: /tmp
+      PADDLE_PDX_CACHE_HOME: /tmp/.paddlex
     volumes:
       - state:/var/lib/guivin
       - type: bind
@@ -34,6 +39,14 @@ services:
       - type: bind
         source: ./tmp/easyocr
         target: /models/easyocr
+        read_only: true
+      - type: bind
+        source: ./tmp/fast-alpr-paddle
+        target: /models/fast-alpr
+        read_only: true
+      - type: bind
+        source: ./backend/app
+        target: /app/backend/app
         read_only: true
         bind:
           create_host_path: false

@@ -17,7 +17,7 @@ from app.evaluation import evaluate_rows
 from app.watchlist_engine import normalise_plate
 
 
-def load_samples(manifest, image_root):
+def load_samples(manifest, image_root, *, allow_negative=False):
     root = Path(image_root).resolve()
     samples = []
     seen = set()
@@ -30,8 +30,14 @@ def load_samples(manifest, image_root):
             if min(bbox[:2]) < 0 or min(bbox[2:]) <= 0:
                 raise ValueError('Vehicle boxes need nonnegative positions and positive dimensions')
             truth = normalise_plate(row['ground_truth_plate'])
-            if not truth:
-                raise ValueError('Every sample needs an independently verified plate label')
+            presence = str(row.get('plate_present', '')).strip().lower()
+            if presence not in {'', 'true', 'false', '1', '0'}:
+                raise ValueError('plate_present must be true/false or 1/0')
+            negative = presence in {'false', '0'}
+            if negative and truth:
+                raise ValueError('A no-plate region cannot have a plate label')
+            if not truth and not (allow_negative and negative):
+                raise ValueError('Missing text is not a negative label; explicitly label a no-plate region')
             identity = (image, bbox)
             if identity in seen:
                 raise ValueError('Duplicate image/vehicle box in evaluation manifest')
@@ -40,6 +46,27 @@ def load_samples(manifest, image_root):
     if not samples:
         raise ValueError('No labeled samples provided')
     return samples
+
+
+def validate_disjoint(samples, development_samples):
+    """Reject reused source images or plate identities across declared datasets.
+
+    This is a leakage guard, not proof of independent labels or representative data.
+    Image hashes detect renamed copies; normalized labels group repeated vehicles.
+    """
+    if not development_samples:
+        raise ValueError('Declare the development dataset before validation')
+    development_hashes = {hashlib.sha256(path.read_bytes()).hexdigest()
+                          for path, _, _ in development_samples}
+    development_plates = {truth for _, _, truth in development_samples if truth}
+    image_overlap = sum(hashlib.sha256(path.read_bytes()).hexdigest() in development_hashes
+                        for path, _, _ in samples)
+    plate_overlap = sum(bool(truth) and truth in development_plates for _, _, truth in samples)
+    if image_overlap or plate_overlap:
+        raise ValueError(f'Validation overlaps development: {image_overlap} image regions, {plate_overlap} plate identities')
+    return {'development_regions': len(development_samples), 'validation_regions': len(samples),
+            'image_overlap': 0, 'plate_overlap': 0,
+            'limits': 'Checks exact image bytes and supplied plate labels only; no near-duplicate or label-quality guarantee.'}
 
 
 def compare(samples, read_image, recognize, clock=perf_counter, box_kind='vehicle', progress=None):

@@ -2,6 +2,13 @@
 import math
 import re
 
+INDIAN_PLATE_PATTERN = re.compile(r'(?:[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}|[0-9]{2}BH[0-9]{4}[A-Z]{1,2})')
+
+
+def is_valid_plate(text):
+    """Return whether normalized text matches a supported Indian registration form."""
+    return bool(INDIAN_PLATE_PATTERN.fullmatch(re.sub('[^A-Z0-9]', '', str(text).upper())))
+
 
 def assemble_plate(results):
     parts = []
@@ -30,14 +37,13 @@ def assemble_plate(results):
     ordered = [p for line in lines for p in sorted(line, key=lambda p: p['x'])]
     # Only join plausible whole registrations; do not join arbitrary signage.
     combined = ''.join(p['text'] for p in ordered)
-    conventional = r'(?:[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}|[0-9]{2}BH[0-9]{4}[A-Z]{1,2})'
     compact = all(all(b['x']-a['right'] <= 3*max(a['height'], b['height'])
                       for a,b in zip(sorted(row,key=lambda p:p['x']), sorted(row,key=lambda p:p['x'])[1:]))
                   for row in lines)
     compact = compact and all(b[0]['y']-a[0]['y'] <= 2*max(a[0]['height'], b[0]['height'])
                               for a,b in zip(lines, lines[1:]))
-    if ordered and len(lines) <= 3 and compact and re.fullmatch(conventional, combined):
+    if ordered and len(lines) <= 3 and compact and is_valid_plate(combined):
         return combined, min(p['confidence'] for p in ordered)
-    valid = [p for p in parts if 5 <= len(p['text']) <= 12 and sum(c.isdigit() for c in p['text']) >= 2]
+    valid = [p for p in parts if is_valid_plate(p['text'])]
     best = max(valid, key=lambda p:p['confidence'], default=None)
     return (best['text'], best['confidence']) if best else ('', 0.0)

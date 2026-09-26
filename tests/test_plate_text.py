@@ -30,3 +30,9 @@ class PlateTextTests(unittest.TestCase):
     def test_bharat_format_and_empty_input(self):
         self.assertEqual(assemble_plate([part('22BH',0),part('1234AA',50)])[0], '22BH1234AA')
         self.assertEqual(assemble_plate([]), ('',0))
+
+    def test_fallback_rejects_signage_that_only_has_digits(self):
+        self.assertEqual(assemble_plate([part('PARKING123', confidence=.99)]), ('',0))
+
+    def test_fallback_accepts_a_complete_registration(self):
+        self.assertEqual(assemble_plate([part('GJ01AB1234')]), ('GJ01AB1234', .9))
