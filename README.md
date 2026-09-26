@@ -15,11 +15,11 @@ GUIVIN brings camera monitoring, AI-assisted vehicle analysis and investigation 
 ## Features
 
 - **📷 GIS Camera Registry** — Search and onboard cameras, inspect worker health and display declared coverage on a Leaflet map. Cameras without verified coordinates remain in the inventory.
-- **🔍 AI-Assisted ANPR** — YOLOv8n vehicle detection, EasyOCR recognition, multi-line plate assembly and repeated-observation voting.
+- **🔍 AI-Assisted ANPR** — YOLOv8n vehicle detection, PaddleOCR/FastALPR recognition, multi-line plate assembly, strict MoRTH syntax validation, and repeated-observation voting.
 - **📡 Live Monitor** — Authorized RTSP analysis, recorded-video processing, annotated previews and per-camera Start/Stop controls.
 - **🌐 Sentinel Integration** — Camera Grid authentication, catalogue import and individual connection results for successful and failed workers.
 - **⚠️ Alerts & Watchlists** — Representative watchlist matching, evidence-linked alerts and independent supervisor review for high-severity dismissals.
-- **🚔 VAHAN / CCTNS Integration** — Live simulation of the national vehicle registry. Every detected plate is cross-referenced to instantly flag stolen vehicles, wanted suspects, or expired PUCs.
+- **🚔 VAHAN / CCTNS Integration (Mock)** — In-memory mock of the national vehicle registry for hackathon demonstration. Every detected plate is cross-referenced to instantly flag stolen vehicles, wanted suspects, or expired PUCs.
 - **📊 Adaptive Camera Intelligence** — Versioned statistical baselines with coverage gates, approval and rollback, alongside opt-in region, tripwire, crowd and loitering rules.
 - **🚗 Vehicle Journeys** — Time-filtered sightings across cameras, pagination and topology-based correlation with uncertainty indicators.
 - **🗂️ Case Management** — Link alerts, assign supervisors, escalate investigations and grant scoped judiciary access.
