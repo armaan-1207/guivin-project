@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Bapatla Indian License Plate Dataset Benchmark
-Evaluates OCR engines (PaddleOCR + CLAHE vs EasyOCR) on the 1,700 plate images in Bapatla dataset.
+Evaluates PaddleOCR on labeled Bapatla images; this is not the live ANPR pipeline.
 """
 import argparse
 import io
@@ -232,6 +232,9 @@ def main():
     else:
         logger.warning(f"Model root not found or incomplete: {model_root}")
 
+    if paddle_engine is None:
+        raise SystemExit("PaddleOCR unavailable; prepare models before evaluation")
+
     # 3. Match image files in zip
     image_entries = {}
     for name in dataset_zip.namelist():
@@ -242,12 +245,18 @@ def main():
 
     logger.info(f"Found {len(image_entries)} images with matching ground truth.")
     all_keys = sorted(list(image_entries.keys()))
+    if args.limit is not None and args.limit <= 0:
+        parser.error("--limit must be positive")
     if args.limit:
         all_keys = all_keys[:args.limit]
         logger.info(f"Limiting benchmark to {len(all_keys)} images.")
 
+    if not all_keys:
+        raise SystemExit("No labeled images matched; no report generated")
+
     # 4. Run Benchmark
     paddle_results = []
+    skipped_images = 0
     latencies = []
     
     # Raw OCR metrics
@@ -265,9 +274,13 @@ def main():
         entry_name, gt = image_entries[key]
         raw_bytes = dataset_zip.read(entry_name)
         nparr = np.frombuffer(raw_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        try:
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        except cv2.error:
+            img = None
 
         if img is None:
+            skipped_images += 1
             continue
 
         raw_pred, gated_pred, conf, lat = run_paddle_prediction(paddle_engine, img)
@@ -277,7 +290,7 @@ def main():
         total_raw_cer_dist += dist
         total_gt_len += len(gt)
 
-        is_raw_exact = (raw_pred == gt) or (gt in raw_pred)
+        is_raw_exact = raw_pred == gt
         is_raw_one_char = (dist <= 1)
         is_gated_exact = (gated_pred == gt)
 
@@ -303,13 +316,15 @@ def main():
         })
 
         if (idx + 1) % 50 == 0 or (idx + 1) == len(all_keys):
-            curr_exact = (raw_exact_matches / (idx + 1)) * 100
-            curr_one_char = (raw_one_char_matches / (idx + 1)) * 100
+            curr_exact = (raw_exact_matches / len(paddle_results)) * 100
+            curr_one_char = (raw_one_char_matches / len(paddle_results)) * 100
             avg_cer = (total_raw_cer_dist / total_gt_len) * 100 if total_gt_len else 0
             logger.info(f"[{idx+1}/{len(all_keys)}] Raw Exact: {curr_exact:.1f}% | 1-Char Tol: {curr_one_char:.1f}% | CER: {avg_cer:.1f}% | Median Latency: {np.median(latencies):.1f}ms")
 
     # 5. Summarize Metrics
-    n = len(all_keys)
+    n = len(paddle_results)
+    if not n:
+        raise SystemExit("No images could be decoded; no report generated")
     raw_exact_rate = (raw_exact_matches / n) * 100 if n else 0.0
     raw_one_char_rate = (raw_one_char_matches / n) * 100 if n else 0.0
     overall_cer = (total_raw_cer_dist / total_gt_len) * 100 if total_gt_len else 0.0
@@ -321,6 +336,9 @@ def main():
         'dataset': 'Bapatla Indian License Plate Dataset',
         'license': 'CC BY 4.0 (Zenodo 13954136)',
         'samples_evaluated': n,
+        'samples_selected': len(all_keys),
+        'images_skipped': skipped_images,
+        'scope': 'PaddleOCR on dataset images; excludes vehicle/plate detection and temporal voting',
         'model_name': 'PP-OCRv5_mobile_det + en_PP-OCRv4_mobile_rec',
         'metrics': {
             'raw_ocr': {

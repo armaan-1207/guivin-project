@@ -15,11 +15,11 @@ GUIVIN brings camera monitoring, AI-assisted vehicle analysis and investigation 
 ## Features
 
 - **📷 GIS Camera Registry** — Search and onboard cameras, inspect worker health and display declared coverage on a Leaflet map. Cameras without verified coordinates remain in the inventory.
-- **🔍 AI-Assisted ANPR** — YOLOv8n vehicle detection, PaddleOCR/FastALPR recognition, multi-line plate assembly, strict MoRTH syntax validation, and repeated-observation voting.
+- **🔍 AI-Assisted ANPR** — YOLOv8n vehicle detection, PaddleOCR/FastALPR recognition, multi-line plate assembly, checks for supported Indian registration formats, and repeated-observation voting.
 - **📡 Live Monitor** — Authorized RTSP analysis, recorded-video processing, annotated previews and per-camera Start/Stop controls.
 - **🌐 Sentinel Integration** — Camera Grid authentication, catalogue import and individual connection results for successful and failed workers.
 - **⚠️ Alerts & Watchlists** — Representative watchlist matching, evidence-linked alerts and independent supervisor review for high-severity dismissals.
-- **🚔 VAHAN / CCTNS Integration (Mock)** — In-memory mock of the national vehicle registry for hackathon demonstration. Every detected plate is cross-referenced to instantly flag stolen vehicles, wanted suspects, or expired PUCs.
+- **🚔 VAHAN / CCTNS Integration (Mock)** — Recognized plates are checked against fictional records to demonstrate stolen/wanted vehicle alerts. This does not connect to government databases or issue PUC alerts.
 - **📊 Adaptive Camera Intelligence** — Versioned statistical baselines with coverage gates, approval and rollback, alongside opt-in region, tripwire, crowd and loitering rules.
 - **🚗 Vehicle Journeys** — Time-filtered sightings across cameras, pagination and topology-based correlation with uncertainty indicators.
 - **🗂️ Case Management** — Link alerts, assign supervisors, escalate investigations and grant scoped judiciary access.
@@ -48,52 +48,71 @@ FastAPI connects the dashboard to capture workers, analytics and investigation w
 
 ## Quick Start
 
-### 1. Clone the Repository
-Begin by cloning the project to your local machine:
+### Before you start
+
+Install **Git**, **Python 3.11 or newer**, and **Docker Desktop**. Start Docker Desktop with **Linux containers**. Python runs the setup helper; AI dependencies run inside Docker, so you do not need to install PyTorch or PaddleOCR on Windows.
+
+Initial setup needs internet access and several GB of free disk space for dependencies and models. Downloads and builds can take a while; later starts reuse them.
+
+### 1. Download the project
+
+These steps target Windows with Docker Desktop. Open PowerShell, then run:
+
 ```bash
-git clone https://github.com/your-org/guivin-project.git
+git clone https://github.com/armaan-1207/guivin-project.git
 cd guivin-project
 ```
 
-### 2. Run with Docker (Recommended)
-The easiest way to run GUIVIN with its full AI pipeline is using Docker Desktop (with Linux containers).
+Already have the project? Open a terminal inside its **guivin-project** folder instead.
+
+### 2. Prepare Docker, models and your account
 
 ```bash
-# Build and start the services in the background
-docker compose build
+python tools/setup_docker.py
+```
+
+Use `python3` if that is your Python command. The helper builds the PaddleOCR/FastALPR image, downloads and checks the models, and creates your local account. It preserves existing credentials and model bundles when rerun. It does not start or restart the application.
+
+Wait for **Setup complete**. If a step fails, resolve the displayed error and rerun it. Model and account files remain local and ignored by Git.
+
+### 3. Start and sign in
+
+```bash
 docker compose up -d
 ```
-*Note: The first run may take a few minutes to download the AI models and base images.*
 
-**Access the Dashboard:**
-Open **http://localhost:8001** in your web browser. 
-Sign in with the username `local-admin`. The auto-generated password is saved in `tmp/docker/admin-password.txt` on your first run.
+Open **http://localhost:8001**. Sign in with:
+
+- **Username:** `local-admin`
+- **Password:** open `tmp/docker/admin-password.txt` locally and copy its contents into the login form.
+
+Keep that password private. The setup helper creates it; application startup does not. Allow time for the models to warm up.
+
+### 4. Connect a camera
+
+Open **Live Monitor → Connect Sentinel**, enter your authorized Camera Grid credentials, and start with **one camera**. The GUIVIN login and Camera Grid login are separate. Inspect connection results and camera health before adding cameras.
+
+### Everyday commands
+
+Run these from the project folder:
 
 ```bash
-# To stop the application (your database and evidence will be saved)
+# Start again after stopping
+docker compose up -d
+
+# Show container status and recent logs
+docker compose ps
+docker compose logs --tail 100 api
+
+# Stop while keeping your database and evidence
 docker compose stop
 ```
 
-### 3. Native Python Setup (Optional)
-If you prefer running without Docker, ensure you have Python 3.11 installed.
+After pulling code changes, run `docker compose build` followed by `docker compose up -d`. Recreating the container expires login sessions. Avoid `docker compose down -v` unless you intend to delete stored application data.
 
-```powershell
-# Create a virtual environment and install dependencies
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r backend/requirements.txt
+**Troubleshooting:** If Docker cannot connect, start Docker Desktop. For missing model/account files, rerun setup. If the dashboard does not open, inspect status and logs above. A healthy container means the web service responds; authenticated `/api/health` also reports model readiness.
 
-# Download AI models (YOLO, EasyOCR, and high-accuracy PaddleOCR)
-python tools/setup_models.py --download
-python tools/setup_fast_alpr.py --download-detector --download-paddle
-python tools/prepare_paddle_anpr.py --detector-bundle tmp/fast-alpr --paddle-root tmp/paddle-evaluation/.paddlex/official_models --output tmp/fast-alpr-paddle
-
-# Start the local development server (with PaddleOCR enabled)
-$env:GUIVIN_ANPR_BACKEND="fast_alpr"
-$env:GUIVIN_ANPR_MODEL_DIR="tmp/fast-alpr-paddle"
-.\run-local.ps1
-```
-Open **http://localhost:8000** in your browser.
+See the [deployment guide](deploy/README.md) for the optional native EasyOCR setup and advanced model options.
 
 ## Sentinel Integration
 
@@ -181,19 +200,22 @@ Selected endpoints:
 - **ACI:** `GET /api/aci/{camera_id}/profiles`, `POST /api/aci/{camera_id}/profiles/{profile_id}/approve` — Inspect baseline versions and approve a candidate.
 - **Reports:** `GET /api/reports/csv`, `GET /api/reports/pdf`, `GET /api/reports/detections` — Export incidents and detection records.
 - **System:** `GET /api/health` — Inspect service and model readiness.
-- **Observability:** `GET /metrics` — Export Prometheus-compatible metrics for DevSecOps monitoring.
+- **Observability:** `GET /metrics` — Export active-worker and application-version metrics; authentication and role restrictions apply.
 
 Protected endpoints enforce account permissions and resource scope. See the interactive API for request bodies, filters and response schemas.
 
 ## Validation
 
-Regression coverage includes scoped access, evidence verification, camera onboarding, source timing, OCR processing and connection failures. The latest verification passed **87 Python tests** and **four JavaScript connection-handler scenarios**.
+Regression coverage includes scoped access, evidence verification, camera onboarding, source timing, OCR processing and connection failures. Run tests separately from the live application:
 
 ```bash
+docker run --rm --entrypoint python -e GUIVIN_USERS_FILE= -e GUIVIN_STATE_DIR=/tmp/guivin-tests -e GUIVIN_WARMUP_MODELS=0 -v "./tests:/app/tests:ro" -v "./tools:/app/tools:ro" guivin:anpr-paddle -m unittest discover -s tests -v
+
+# Optional frontend check (requires Node.js)
 node tests/test_sentinel_ui.cjs
 ```
 
-The project includes offline OCR comparisons, evaluation metrics and backup verification tools. Model assets, credentials, evidence and downloaded datasets stay outside version control.
+The project includes offline OCR comparisons, evaluation metrics and backup verification tools. Bapatla evaluation measures PaddleOCR on dataset images, not end-to-end live-camera accuracy. Exact match requires the entire normalized prediction to equal the label. Model assets, credentials, evidence and downloaded datasets stay outside version control.
 
 ## Documentation
 

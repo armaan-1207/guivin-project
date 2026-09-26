@@ -2,6 +2,9 @@ name: guivin
 services:
   api:
     image: guivin:anpr-paddle
+    build:
+      context: .
+      target: runtime
     ports:
       - "127.0.0.1:8001:8000"
     restart: unless-stopped
@@ -43,10 +46,6 @@ services:
       - type: bind
         source: ./tmp/fast-alpr-paddle
         target: /models/fast-alpr
-        read_only: true
-      - type: bind
-        source: ./backend/app
-        target: /app/backend/app
         read_only: true
         bind:
           create_host_path: false

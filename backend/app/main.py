@@ -277,7 +277,7 @@ class VerifyEvidenceRequest(BaseModel):
 @app.get("/metrics", response_class=Response, tags=["Observability"])
 def get_metrics():
     """Prometheus-compatible metrics endpoint."""
-    active = len(stream_manager.active_streams)
+    active = len(stream_manager.active_cameras())
     metrics = [
         f'guivin_active_streams {active}',
         'guivin_app_info{version="1.0"} 1'

@@ -3,7 +3,8 @@ services:
     image: guivin:anpr-paddle
     build:
       context: .
-      dockerfile: deploy/Dockerfile.anpr-paddle
+      dockerfile: Dockerfile
+      target: runtime
     environment:
       GUIVIN_ANPR_BACKEND: fast_alpr
       GUIVIN_ANPR_MODEL_DIR: /models/fast-alpr

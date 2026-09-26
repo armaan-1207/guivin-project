@@ -73,9 +73,6 @@ def check_plate(db: Session, plate_raw: str) -> Optional[dict]:
 
     # If local DB matched, return that. If VAHAN flagged it, return VAHAN.
     if matched:
-        # Merge VAHAN owner if local is missing
-        if not matched.get("owner_name") and vahan_info["owner"] != "UNKNOWN":
-            matched["owner_name"] = vahan_info["owner"]
         return matched
         
     if vahan_info.get("stolen_flag") or vahan_info.get("wanted_flag"):
@@ -84,9 +81,9 @@ def check_plate(db: Session, plate_raw: str) -> Optional[dict]:
             "identifier": plate_nodash,
             "normalised": plate,
             "reason": vahan_info.get("alert_context", "Flagged by CCTNS/VAHAN"),
-            "source_db": "VAHAN/CCTNS",
+            "source_db": "VAHAN/CCTNS-MOCK",
             "owner_name": vahan_info.get("owner", "Unknown"),
-            "additional_info": f"Registration: {vahan_info.get('registration_status', 'Unknown')}",
+            "additional_info": f"DEMO MOCK DATA — Registration: {vahan_info.get('registration_status', 'Unknown')}",
             "priority": "CRITICAL" if vahan_info.get("stolen_flag") else "HIGH",
         }
         

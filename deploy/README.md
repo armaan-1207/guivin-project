@@ -16,14 +16,13 @@ shared identity, coordinated workers, durable messaging and database/storage
 concurrency have been implemented and tested. An HPA around this application
 would duplicate capture and break these assumptions.
 
-1. Run `python tools/setup_models.py --download` in the configured project venv
-   if the model files are not present. Downloads are explicit setup actions;
-   application startup does not download model weights.
-2. Run `python tools/bootstrap_container.py` to create a local account. It stores
-   its generated password in ignored `tmp/docker/admin-password.txt`; do not
-   commit/share that file. Use `tools/manage_users.py --file tmp/docker/users.json`
-   to manage accounts subsequently.
-3. Run `docker compose build`, then `docker compose up -d`.
+1. Install Git, Python 3.11+ and Docker Desktop with Linux containers; open a
+   terminal in the repository root and start Docker Desktop.
+2. Run `python tools/setup_docker.py`. It builds the complete image, explicitly
+   downloads models, verifies loading and creates an account if none exists.
+   Existing accounts and hybrid bundles are preserved. The password is saved in
+   ignored `tmp/docker/admin-password.txt`; do not commit/share that file.
+3. Wait for setup to complete, then run `docker compose up -d`.
 4. Open `http://localhost:8001` and sign in as `local-admin` using that file.
    The existing native application on port 8000 remains separate.
 5. Inspect `docker compose logs --tail 100 api` and the authenticated health API.
@@ -39,20 +38,41 @@ Authentication secrets are mounted from the local file, not baked into images.
 The Compose port binds only to loopback. HTTPS, MFA, PKI and encrypted storage
 are still required before a shared/production deployment.
 
+The guided setup targets Windows Docker Desktop. On a Linux host, additionally
+configure bind-mount ownership so container UID/GID 10001 can read the model
+files and `users.json`. Keep the plaintext password file private to its owner;
+do not solve a mount-permission error by making the entire credentials folder
+world-readable.
+
 The default image uses CPU PyTorch. GPU inference needs a separately validated
 CUDA image/host configuration; do not infer multi-camera capacity from this file.
 
-OCR now defaults to `GUIVIN_OCR_PREPROCESSING=preserve`: aspect-preserving
-grayscale crops and nearby multi-line text assembly, without guessed character
-substitutions. `legacy` is the supported rollback setting; set the environment
-variable before `docker compose up -d`. Experimental direct/beam modes are only
-available in the offline comparison tool. The 25-region development sample
-improved from 2 to 7 exact matches; this remains inadequate field accuracy.
-The dedicated plate detector is still unconfigured.
+The default Docker setup uses a dedicated large FastALPR plate detector with
+PaddleOCR. `GUIVIN_OCR_PREPROCESSING` applies only to the alternative EasyOCR
+backend. Source code is built into the image: after changes, run
+`docker compose build` and `docker compose up -d`; recreating expires sessions.
+Model loading checks do not establish accuracy or multi-camera capacity.
+
+### Optional native baseline
+
+This installs the baseline EasyOCR backend, not PaddleOCR/FastALPR. Docker avoids
+the Windows native-library problem described above.
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r backend/requirements.txt
+python tools/setup_models.py --download
+$env:GUIVIN_ANPR_BACKEND="easyocr"
+.\run-local.ps1
+```
+
+Open http://localhost:8000. Without an account file, native development mode
+allows loopback access only; do not expose it as a shared deployment.
 
 ### Complete pretrained ANPR engine
 
-FastALPR is an opt-in CPU backend combining the YOLOv9-t-384 plate detector
+The lightweight FastALPR alternative is a CPU backend combining the YOLOv9-t-384 plate detector
 with the CCT-XS-v2 global plate recognizer. GUIVIN runs both stages on selected
 vehicle crops and retains tracking, OCR budgets, plate-format checks and temporal
 consensus. Ambiguous crops containing different valid plates return no read.
@@ -62,7 +82,7 @@ models. No remote inference service receives camera footage.
 Build the base image first, then install the optional engine and fetch its models:
 
 ```powershell
-docker compose build
+docker build --target base -t guivin:local .
 docker build -f deploy/Dockerfile.fast-alpr -t guivin:fast-alpr .
 docker run --rm --entrypoint python -v "./tools:/app/tools:ro" -v "./tmp/fast-alpr:/models/fast-alpr" guivin:fast-alpr /app/tools/setup_fast_alpr.py --directory /models/fast-alpr
 docker compose -f compose.yaml -f compose.fast-alpr.yaml up -d
@@ -72,8 +92,9 @@ Setup records model hashes and package versions under ignored `tmp/fast-alpr`.
 Runtime loads hash-verified local files only. Hashes pin locally installed bytes;
 they are not an independent publisher signature. Model errors are visible in
 authenticated health responses through `anpr_backend`, `ocr`, `plate_detector`
-and `errors`. To roll back, run `docker compose up -d --build` using only the
-base Compose file. Restarting expires local sessions.
+and `errors`. To return to the default PaddleOCR setup, run
+`docker compose up -d --build` using only the base Compose file after preparing
+its models. Restarting expires local sessions.
 
 The integration is functional, not a verified accuracy improvement: an initial
 20-image reused development check localized 16/25 labeled plates and read 7/25
@@ -96,10 +117,10 @@ text detection/recognition on the same annotated plate crops. It does not change
 the running API, load camera credentials or write observations into its database.
 PaddleOCR is a general OCR candidate here, not an Indian-plate fine-tuned model.
 
-After building `guivin:local`, create `tmp/paddle-evaluation` and run:
+Build the evaluation stage, create `tmp/paddle-evaluation` and run:
 
 ```powershell
-docker build -f deploy/Dockerfile.ocr-evaluation -t guivin:ocr-evaluation .
+docker build --target ocr -t guivin:ocr-evaluation .
 docker run --rm -v "./tools:/app/tools:ro" -v "./backend/app:/app/backend/app:ro" -v "./tmp/paddle-evaluation:/cache" guivin:ocr-evaluation --download-only
 docker run --rm --network none -v "./tools:/app/tools:ro" -v "./backend/app:/app/backend/app:ro" -v "./tmp/paddle-evaluation:/cache" -v "./tmp/easyocr:/models/easyocr:ro" -v "./tmp/ocr-evaluation:/evaluation:ro" guivin:ocr-evaluation --manifest /evaluation/datacluster/labels.csv --images /evaluation/datacluster --output /cache/comparison.json
 ```
@@ -118,7 +139,8 @@ For the bounded-input experiment, repeat the offline run with `--bounded` and a
 different output path. It preserves crop aspect ratio and color within 480x256,
 adds a 12-pixel border, and uses a maximum detector side of 960. Compare both
 recognition and tail latency before selecting a setting; smaller inputs can
-lose characters. Neither candidate is wired into the serving API.
+lose characters. The production Paddle adapter uses bounded color crops; this
+comparison tool runs separately and does not alter the serving configuration.
 
 Validation manifests can additionally contain `plate_present` (`true`/`false`).
 A negative region must explicitly set `plate_present=false` and leave
