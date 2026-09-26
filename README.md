@@ -15,10 +15,11 @@ GUIVIN brings camera monitoring, AI-assisted vehicle analysis and investigation 
 ## Features
 
 - **📷 GIS Camera Registry** — Search and onboard cameras, inspect worker health and display declared coverage on a Leaflet map. Cameras without verified coordinates remain in the inventory.
-- **🔍 AI-Assisted ANPR** — YOLOv8n vehicle detection, EasyOCR recognition, multi-line plate assembly and repeated-observation voting.
+- **🔍 AI-Assisted ANPR** — YOLOv8n vehicle detection, PaddleOCR/FastALPR recognition, multi-line plate assembly, strict MoRTH syntax validation, and repeated-observation voting.
 - **📡 Live Monitor** — Authorized RTSP analysis, recorded-video processing, annotated previews and per-camera Start/Stop controls.
 - **🌐 Sentinel Integration** — Camera Grid authentication, catalogue import and individual connection results for successful and failed workers.
 - **⚠️ Alerts & Watchlists** — Representative watchlist matching, evidence-linked alerts and independent supervisor review for high-severity dismissals.
+- **🚔 VAHAN / CCTNS Integration (Mock)** — In-memory mock of the national vehicle registry for hackathon demonstration. Every detected plate is cross-referenced to instantly flag stolen vehicles, wanted suspects, or expired PUCs.
 - **📊 Adaptive Camera Intelligence** — Versioned statistical baselines with coverage gates, approval and rollback, alongside opt-in region, tripwire, crowd and loitering rules.
 - **🚗 Vehicle Journeys** — Time-filtered sightings across cameras, pagination and topology-based correlation with uncertainty indicators.
 - **🗂️ Case Management** — Link alerts, assign supervisors, escalate investigations and grant scoped judiciary access.
@@ -47,37 +48,52 @@ FastAPI connects the dashboard to capture workers, analytics and investigation w
 
 ## Quick Start
 
-### Docker Compose
+### 1. Clone the Repository
+Begin by cloning the project to your local machine:
+```bash
+git clone https://github.com/your-org/guivin-project.git
+cd guivin-project
+```
 
-Use Docker Desktop with Linux containers, or Docker Engine with Compose. First prepare model files and generate the local account using the [deployment guide](deploy/README.md).
+### 2. Run with Docker (Recommended)
+The easiest way to run GUIVIN with its full AI pipeline is using Docker Desktop (with Linux containers).
 
 ```bash
-# Run from the project root after setup
+# Build and start the services in the background
 docker compose build
 docker compose up -d
 ```
+*Note: The first run may take a few minutes to download the AI models and base images.*
 
-Open **http://localhost:8001**. Sign in as `local-admin` using the generated password stored locally in `tmp/docker/admin-password.txt`.
+**Access the Dashboard:**
+Open **http://localhost:8001** in your web browser. 
+Sign in with the username `local-admin`. The auto-generated password is saved in `tmp/docker/admin-password.txt` on your first run.
 
 ```bash
-# Stop the app while keeping its database and evidence
+# To stop the application (your database and evidence will be saved)
 docker compose stop
 ```
 
-Docker is the verified local inference runtime. Use one API instance; model files and credentials are mounted separately from the image, and application state is retained in a Docker volume.
-
-### Native development — Python 3.11
-
-On a machine that supports the project's PyTorch/OpenCV dependencies:
+### 3. Native Python Setup (Optional)
+If you prefer running without Docker, ensure you have Python 3.11 installed.
 
 ```powershell
+# Create a virtual environment and install dependencies
 python -m venv .venv
-./.venv/Scripts/python.exe -m pip install -r backend/requirements.txt
-./.venv/Scripts/python.exe tools/setup_models.py --download
-./run-local.ps1
-```
+.\.venv\Scripts\Activate.ps1
+pip install -r backend/requirements.txt
 
-Open **http://localhost:8000**. The Windows launcher binds to loopback. Without a configured account file, this runs in local development mode. See the deployment guide for the tested Windows runtime compatibility note and account setup.
+# Download AI models (YOLO, EasyOCR, and high-accuracy PaddleOCR)
+python tools/setup_models.py --download
+python tools/setup_fast_alpr.py --download-detector --download-paddle
+python tools/prepare_paddle_anpr.py --detector-bundle tmp/fast-alpr --paddle-root tmp/paddle-evaluation/.paddlex/official_models --output tmp/fast-alpr-paddle
+
+# Start the local development server (with PaddleOCR enabled)
+$env:GUIVIN_ANPR_BACKEND="fast_alpr"
+$env:GUIVIN_ANPR_MODEL_DIR="tmp/fast-alpr-paddle"
+.\run-local.ps1
+```
+Open **http://localhost:8000** in your browser.
 
 ## Sentinel Integration
 
@@ -100,8 +116,8 @@ Supported roles: **Field Operator, Sector Supervisor, Department Head, SCRB Admi
 
 ## Tech Stack
 
-- **Backend:** Python · FastAPI · SQLAlchemy · SQLite · Uvicorn
-- **Computer vision:** YOLOv8n · EasyOCR · OpenCV · ByteTrack-style association
+- **Backend:** Python · FastAPI · SQLAlchemy · SQLite (WAL mode) · Uvicorn
+- **Computer vision:** YOLOv8n · PaddleOCR · FastALPR · EasyOCR · CLAHE Preprocessing · OpenCV
 - **Frontend:** HTML/CSS · Vanilla JavaScript · Leaflet · hls.js
 - **Streaming:** RTSP/TCP ingestion · MJPEG previews · HLS proxy support
 - **Evidence:** SHA-256 hashing · Local chain verification · Sampled video clips
@@ -165,6 +181,7 @@ Selected endpoints:
 - **ACI:** `GET /api/aci/{camera_id}/profiles`, `POST /api/aci/{camera_id}/profiles/{profile_id}/approve` — Inspect baseline versions and approve a candidate.
 - **Reports:** `GET /api/reports/csv`, `GET /api/reports/pdf`, `GET /api/reports/detections` — Export incidents and detection records.
 - **System:** `GET /api/health` — Inspect service and model readiness.
+- **Observability:** `GET /metrics` — Export Prometheus-compatible metrics for DevSecOps monitoring.
 
 Protected endpoints enforce account permissions and resource scope. See the interactive API for request bodies, filters and response schemas.
 

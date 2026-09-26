@@ -274,6 +274,16 @@ class VerifyEvidenceRequest(BaseModel):
 # ── CAMERA REGISTRY ROUTES ────────────────────────────────────────────────────
 # ════════════════════════════════════════════════════════════════════════════════
 
+@app.get("/metrics", response_class=Response, tags=["Observability"])
+def get_metrics():
+    """Prometheus-compatible metrics endpoint."""
+    active = len(stream_manager.active_streams)
+    metrics = [
+        f'guivin_active_streams {active}',
+        'guivin_app_info{version="1.0"} 1'
+    ]
+    return Response(content="\n".join(metrics) + "\n", media_type="text/plain")
+
 @app.get("/api/cameras", tags=["Camera Registry"])
 def list_cameras(db: Session = Depends(get_db)):
     return get_all_cameras(db)

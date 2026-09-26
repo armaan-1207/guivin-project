@@ -1,0 +1,8 @@
+FROM guivin:local
+USER root
+RUN python -m pip install 'fast-alpr[onnx]==0.4.0' 'fast-plate-ocr==1.1.0' \
+    'open-image-models==0.6.0' 'onnxruntime==1.30.0' \
+    'numpy==1.26.4' 'opencv-python-headless==4.10.0.84' \
+    && python -m pip check
+COPY backend/app /app/backend/app
+USER 10001:10001

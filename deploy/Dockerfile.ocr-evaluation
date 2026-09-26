@@ -1,0 +1,14 @@
+# Offline research environment; never replaces the serving image.
+FROM guivin:local
+USER root
+RUN python -m pip install --no-cache-dir "numpy==1.26.4" "paddlepaddle==3.0.0" "paddleocr==3.0.3" "paddlex[ocr]==3.0.3"
+# Paddle's research extras need AnyIO 4; this upgrade is isolated from serving.
+RUN python -m pip install --no-cache-dir "fastapi==0.115.12" && python -m pip check
+# PaddleX 3.0 imports the pre-1.0 LangChain API even for OCR pipelines.
+RUN python -m pip uninstall -y langchain-classic \
+    && python -m pip install --no-cache-dir "langchain==0.3.25" "langchain-community==0.3.24" "langchain-openai==0.3.18" "langgraph==0.4.8" \
+    && python -m pip check
+ENV HOME=/cache GUIVIN_STATE_DIR=/tmp/ocr-evaluation GUIVIN_USERS_FILE="" \
+    GUIVIN_WARMUP_MODELS=0 PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
+USER 10001:10001
+ENTRYPOINT ["python", "/app/tools/compare_paddleocr.py"]

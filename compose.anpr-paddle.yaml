@@ -1,0 +1,16 @@
+services:
+  api:
+    image: guivin:anpr-paddle
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.anpr-paddle
+    environment:
+      GUIVIN_ANPR_BACKEND: fast_alpr
+      GUIVIN_ANPR_MODEL_DIR: /models/fast-alpr
+    volumes:
+      - type: bind
+        source: ./tmp/fast-alpr-paddle
+        target: /models/fast-alpr
+        read_only: true
+        bind:
+          create_host_path: false

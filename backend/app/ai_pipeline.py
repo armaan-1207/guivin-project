@@ -12,6 +12,8 @@ import logging
 import time
 import math
 from .config import YOLO_MODEL, PLATE_MODEL, PLATE_DETECTION_THRESHOLD, OCR_PREPROCESSING
+from .config import ANPR_BACKEND, ANPR_MODEL_DIR
+from .anpr_engine import Engine, load_local_engine
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Tuple, List
@@ -26,8 +28,16 @@ _model_lock = threading.Lock()
 _inference_lock = threading.Lock()
 _ocr_lock = threading.Lock()
 _failures = {}
+_anpr = Engine(lambda: load_local_engine(ANPR_MODEL_DIR, os.getenv('GUIVIN_AI_THREADS', '2')))
 
 def model_status():
+    if ANPR_BACKEND == 'fast_alpr':
+        errors = {k: v[1] for k, v in _failures.items() if k == 'yolo'}
+        if _anpr.error:
+            errors['anpr'] = _anpr.error
+        return {'yolo': 'FAILED' if 'yolo' in _failures else 'READY' if _yolo_model is not None else 'NOT_LOADED',
+                'plate_detector': _anpr.status(), 'ocr': _anpr.status(),
+                'anpr_backend': 'fast_alpr', 'errors': errors}
     plate_status = ('READY' if _plate_model is not None else
                     'FAILED' if 'plate' in _failures else
                     'NOT_CONFIGURED' if not PLATE_MODEL else 'NOT_LOADED')
@@ -119,6 +129,12 @@ def warmup_models() -> dict:
         except Exception as error:
             _failures['yolo'] = (time.monotonic(), type(error).__name__)
             logger.error('[AI] YOLO warm-up failed: %s', type(error).__name__)
+    if ANPR_BACKEND == 'fast_alpr':
+        try:
+            _anpr.predict(blank)
+        except RuntimeError:
+            logger.error('[AI] FastALPR warm-up failed: %s', _anpr.error)
+        return model_status()
     ocr = _get_ocr()
     if ocr is not None:
         try:
@@ -284,6 +300,8 @@ def extract_plate_observation(frame: np.ndarray, bbox: tuple, *, ocr_scale: floa
     """
     if not math.isfinite(ocr_scale) or not 1.0 <= ocr_scale <= 2.5:
         raise ValueError('OCR scale must be between 1.0 and 2.5')
+    if ANPR_BACKEND == 'fast_alpr':
+        return _anpr.observe(frame, bbox)
     crop, localization = localize_plate(frame, bbox)
     return read_plate_crop(crop, localization=localization, ocr_scale=ocr_scale,
                            preprocessing=preprocessing or OCR_PREPROCESSING)
@@ -304,6 +322,8 @@ def read_plate_crop(crop: np.ndarray, *, localization='ANNOTATED_PLATE_CROP', oc
         height, width = crop.shape[:2]
         factor = min(480 / width, 256 / height)
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4,4))
+        gray = clahe.apply(gray)
         gray = cv2.resize(gray, (max(1, round(width*factor)), max(1, round(height*factor))),
                           interpolation=cv2.INTER_CUBIC if factor > 1 else cv2.INTER_AREA)
         gray = cv2.copyMakeBorder(gray, 12, 12, 12, 12, cv2.BORDER_REPLICATE)
