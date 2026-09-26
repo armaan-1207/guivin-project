@@ -19,6 +19,7 @@ GUIVIN brings camera monitoring, AI-assisted vehicle analysis and investigation 
 - **📡 Live Monitor** — Authorized RTSP analysis, recorded-video processing, annotated previews and per-camera Start/Stop controls.
 - **🌐 Sentinel Integration** — Camera Grid authentication, catalogue import and individual connection results for successful and failed workers.
 - **⚠️ Alerts & Watchlists** — Representative watchlist matching, evidence-linked alerts and independent supervisor review for high-severity dismissals.
+- **🚔 VAHAN / CCTNS Integration** — Live simulation of the national vehicle registry. Every detected plate is cross-referenced to instantly flag stolen vehicles, wanted suspects, or expired PUCs.
 - **📊 Adaptive Camera Intelligence** — Versioned statistical baselines with coverage gates, approval and rollback, alongside opt-in region, tripwire, crowd and loitering rules.
 - **🚗 Vehicle Journeys** — Time-filtered sightings across cameras, pagination and topology-based correlation with uncertainty indicators.
 - **🗂️ Case Management** — Link alerts, assign supervisors, escalate investigations and grant scoped judiciary access.
@@ -82,10 +83,14 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r backend/requirements.txt
 
-# Download AI models
+# Download AI models (YOLO, EasyOCR, and high-accuracy PaddleOCR)
 python tools/setup_models.py --download
+python tools/setup_fast_alpr.py --download-detector --download-paddle
+python tools/prepare_paddle_anpr.py --detector-bundle tmp/fast-alpr --paddle-root tmp/paddle-evaluation/.paddlex/official_models --output tmp/fast-alpr-paddle
 
-# Start the local development server
+# Start the local development server (with PaddleOCR enabled)
+$env:GUIVIN_ANPR_BACKEND="fast_alpr"
+$env:GUIVIN_ANPR_MODEL_DIR="tmp/fast-alpr-paddle"
 .\run-local.ps1
 ```
 Open **http://localhost:8000** in your browser.
@@ -111,8 +116,8 @@ Supported roles: **Field Operator, Sector Supervisor, Department Head, SCRB Admi
 
 ## Tech Stack
 
-- **Backend:** Python · FastAPI · SQLAlchemy · SQLite · Uvicorn
-- **Computer vision:** YOLOv8n · EasyOCR · OpenCV · ByteTrack-style association
+- **Backend:** Python · FastAPI · SQLAlchemy · SQLite (WAL mode) · Uvicorn
+- **Computer vision:** YOLOv8n · PaddleOCR · FastALPR · EasyOCR · CLAHE Preprocessing · OpenCV
 - **Frontend:** HTML/CSS · Vanilla JavaScript · Leaflet · hls.js
 - **Streaming:** RTSP/TCP ingestion · MJPEG previews · HLS proxy support
 - **Evidence:** SHA-256 hashing · Local chain verification · Sampled video clips
@@ -176,6 +181,7 @@ Selected endpoints:
 - **ACI:** `GET /api/aci/{camera_id}/profiles`, `POST /api/aci/{camera_id}/profiles/{profile_id}/approve` — Inspect baseline versions and approve a candidate.
 - **Reports:** `GET /api/reports/csv`, `GET /api/reports/pdf`, `GET /api/reports/detections` — Export incidents and detection records.
 - **System:** `GET /api/health` — Inspect service and model readiness.
+- **Observability:** `GET /metrics` — Export Prometheus-compatible metrics for DevSecOps monitoring.
 
 Protected endpoints enforce account permissions and resource scope. See the interactive API for request bodies, filters and response schemas.
 
