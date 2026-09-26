@@ -27,11 +27,14 @@ jobs:
           cd backend
           python -c "from app.main import app; print('IMPORT OK')"
 
+      - name: Download AI models
+        run: python tools/setup_models.py --download
+
       - name: Start server and health check
         run: |
           cd backend
           uvicorn app.main:app --host 0.0.0.0 --port 8000 &
-          sleep 5
+          sleep 10
           curl -sf http://localhost:8000/api/health | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['status']=='operational', f'unexpected: {d}'; print('Health OK')"
           curl -sf http://localhost:8000/api/cameras | python3 -c "import json,sys; d=json.load(sys.stdin); assert len(d)>=12, f'expected >=12 cameras, got {len(d)}'; print(f'Cameras OK: {len(d)}')"
           curl -sf http://localhost:8000/api/watchlist | python3 -c "import json,sys; d=json.load(sys.stdin); assert len(d)>=8, 'watchlist empty'; print(f'Watchlist OK: {len(d)}')"
